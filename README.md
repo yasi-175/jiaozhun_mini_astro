@@ -18,6 +18,19 @@
 
 SDK 读取运行在后台线程，`Actual` 显示后台实际采样间隔，`Read` 显示单次读取耗时。
 
+## Mount DEC control
+
+本程序现在也可以通过 USB 串口直接控制赤道仪 A 设备的 DEC 轴，不需要在本程序里启动
+INDI。参考固件里的 `SerialCommand::process()`，A 设备 USB 串口接收：
+
+- `MOTOR:MODE,0`：切到速度模式
+- `MOTOR:SPEED,<kHz>`：设置 DEC 轴速度，正负号决定方向
+- `MOTOR:SPEED,0`：停止 DEC 轴
+
+界面第二行选择 A 设备串口，默认 `115200` baud；连接后用 `DEC +` / `DEC -`
+按当前 `DEC kHz` 速度转动，`DEC Stop` 停止。编码器读取和赤道仪控制是两条独立链路：
+编码器仍然走 QHYCCD SDK，DEC 控制走 USB 串口。
+
 ## Build
 
 ```bash

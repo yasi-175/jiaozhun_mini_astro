@@ -2,6 +2,7 @@
 
 #include <QDateTime>
 #include <QHBoxLayout>
+#include <QSerialPortInfo>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -15,6 +16,7 @@ MainWindow::MainWindow(const QString &libraryPath,
     , m_intervalMs(intervalMs)
 {
     qRegisterMetaType<EncoderSample>("EncoderSample");
+    m_mountController = new MountController(this);
     setupUi();
 }
 
@@ -67,6 +69,7 @@ void MainWindow::setupUi()
     toolbar->addWidget(m_triggerCheckBox);
     toolbar->addWidget(m_statusLabel, 1);
     root->addLayout(toolbar);
+    setupMountUi(root);
 
     auto *values = new QHBoxLayout();
     values->setSpacing(16);
@@ -126,6 +129,81 @@ void MainWindow::setupUi()
         if (m_worker)
             QMetaObject::invokeMethod(m_worker, "setTriggerEnabled", Qt::QueuedConnection, Q_ARG(bool, checked));
     });
+
+}
+
+void MainWindow::setupMountUi(QVBoxLayout *root)
+{
+    auto *mountToolbar = new QHBoxLayout();
+    mountToolbar->setSpacing(8);
+
+    auto *mountLabel = new QLabel(tr("Mount:"), this);
+    m_mountPortComboBox = new QComboBox(this);
+    m_mountPortComboBox->setMinimumWidth(180);
+    m_refreshPortsButton = new QPushButton(tr("Refresh"), this);
+
+    auto *baudLabel = new QLabel(tr("Baud:"), this);
+    m_mountBaudSpinBox = new QSpinBox(this);
+    m_mountBaudSpinBox->setRange(1200, 1000000);
+    m_mountBaudSpinBox->setSingleStep(9600);
+    m_mountBaudSpinBox->setValue(115200);
+
+    m_mountConnectButton = new QPushButton(tr("Connect"), this);
+    m_mountDisconnectButton = new QPushButton(tr("Disconnect"), this);
+    m_mountDisconnectButton->setEnabled(false);
+
+    auto *speedLabel = new QLabel(tr("DEC kHz:"), this);
+    m_mountSpeedSpinBox = new QDoubleSpinBox(this);
+    m_mountSpeedSpinBox->setRange(0.01, 40.0);
+    m_mountSpeedSpinBox->setDecimals(3);
+    m_mountSpeedSpinBox->setSingleStep(0.1);
+    m_mountSpeedSpinBox->setValue(1.0);
+    m_mountSpeedSpinBox->setSuffix(tr(" kHz"));
+
+    m_decPositiveButton = new QPushButton(tr("DEC +"), this);
+    m_decNegativeButton = new QPushButton(tr("DEC -"), this);
+    m_decStopButton = new QPushButton(tr("DEC Stop"), this);
+    m_decPositiveButton->setEnabled(false);
+    m_decNegativeButton->setEnabled(false);
+    m_decStopButton->setEnabled(false);
+
+    m_mountStatusLabel = new QLabel(tr("Mount disconnected"), this);
+    m_mountStatusLabel->setMinimumWidth(260);
+
+    mountToolbar->addWidget(mountLabel);
+    mountToolbar->addWidget(m_mountPortComboBox);
+    mountToolbar->addWidget(m_refreshPortsButton);
+    mountToolbar->addWidget(baudLabel);
+    mountToolbar->addWidget(m_mountBaudSpinBox);
+    mountToolbar->addWidget(m_mountConnectButton);
+    mountToolbar->addWidget(m_mountDisconnectButton);
+    mountToolbar->addWidget(speedLabel);
+    mountToolbar->addWidget(m_mountSpeedSpinBox);
+    mountToolbar->addWidget(m_decNegativeButton);
+    mountToolbar->addWidget(m_decStopButton);
+    mountToolbar->addWidget(m_decPositiveButton);
+    mountToolbar->addWidget(m_mountStatusLabel, 1);
+    root->addLayout(mountToolbar);
+
+    connect(m_refreshPortsButton, &QPushButton::clicked, this, &MainWindow::refreshMountPorts);
+    connect(m_mountConnectButton, &QPushButton::clicked, this, &MainWindow::connectMount);
+    connect(m_mountDisconnectButton, &QPushButton::clicked, this, &MainWindow::disconnectMount);
+    connect(m_decPositiveButton, &QPushButton::clicked, this, &MainWindow::slewDecPositive);
+    connect(m_decNegativeButton, &QPushButton::clicked, this, &MainWindow::slewDecNegative);
+    connect(m_decStopButton, &QPushButton::clicked, this, &MainWindow::stopDec);
+    connect(m_mountController, &MountController::statusChanged, this, &MainWindow::updateMountStatus);
+    connect(m_mountController, &MountController::connectionChanged, this, [this](bool connected) {
+        m_mountConnectButton->setEnabled(!connected);
+        m_mountDisconnectButton->setEnabled(connected);
+        m_decPositiveButton->setEnabled(connected);
+        m_decNegativeButton->setEnabled(connected);
+        m_decStopButton->setEnabled(connected);
+        m_mountPortComboBox->setEnabled(!connected);
+        m_mountBaudSpinBox->setEnabled(!connected);
+        m_refreshPortsButton->setEnabled(!connected);
+    });
+
+    refreshMountPorts();
 }
 
 void MainWindow::startReading()
@@ -212,6 +290,73 @@ void MainWindow::updateStatus(const QString &message)
     m_statusLabel->setText(QStringLiteral("%1  %2")
                            .arg(QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss")))
                            .arg(message));
+}
+
+void MainWindow::updateMountStatus(const QString &message)
+{
+    if (!m_mountStatusLabel)
+        return;
+
+    m_mountStatusLabel->setText(QStringLiteral("%1  %2")
+                                .arg(QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss")))
+                                .arg(message));
+}
+
+void MainWindow::refreshMountPorts()
+{
+    const QString current = m_mountPortComboBox->currentData().toString();
+    m_mountPortComboBox->clear();
+
+    const auto ports = QSerialPortInfo::availablePorts();
+    for (const QSerialPortInfo &port : ports) {
+        QString label = port.portName();
+        if (!port.description().isEmpty())
+            label += tr(" - %1").arg(port.description());
+        m_mountPortComboBox->addItem(label, port.systemLocation());
+    }
+
+    if (m_mountPortComboBox->count() == 0)
+        m_mountPortComboBox->addItem(tr("No serial ports"), QString());
+
+    const int index = m_mountPortComboBox->findData(current);
+    if (index >= 0)
+        m_mountPortComboBox->setCurrentIndex(index);
+}
+
+void MainWindow::connectMount()
+{
+    const QString portName = m_mountPortComboBox->currentData().toString();
+    if (portName.isEmpty()) {
+        updateMountStatus(tr("No mount serial port selected"));
+        return;
+    }
+
+    m_mountController->connectToPort(portName, m_mountBaudSpinBox->value());
+}
+
+void MainWindow::disconnectMount()
+{
+    m_mountController->disconnectFromPort();
+}
+
+void MainWindow::slewDecPositive()
+{
+    m_mountController->slewDec(selectedMountSpeedKHz());
+}
+
+void MainWindow::slewDecNegative()
+{
+    m_mountController->slewDec(-selectedMountSpeedKHz());
+}
+
+void MainWindow::stopDec()
+{
+    m_mountController->stopDec();
+}
+
+double MainWindow::selectedMountSpeedKHz() const
+{
+    return m_mountSpeedSpinBox ? m_mountSpeedSpinBox->value() : 1.0;
 }
 
 void MainWindow::appendSample(const EncoderSample &sample)

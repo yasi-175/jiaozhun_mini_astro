@@ -14,10 +14,10 @@ EQ            = =
 
 CC            = gcc
 CXX           = g++
-DEFINES       = -DQT_DEPRECATED_WARNINGS -DQT_NO_DEBUG -DQT_CHARTS_LIB -DQT_WIDGETS_LIB -DQT_GUI_LIB -DQT_CORE_LIB
+DEFINES       = -DQT_DEPRECATED_WARNINGS -DQT_NO_DEBUG -DQT_CHARTS_LIB -DQT_WIDGETS_LIB -DQT_GUI_LIB -DQT_SERIALPORT_LIB -DQT_CORE_LIB
 CFLAGS        = -pipe -O2 -Wall -Wextra -D_REENTRANT -fPIC $(DEFINES)
 CXXFLAGS      = -pipe -O2 -std=gnu++1z -Wall -Wextra -D_REENTRANT -fPIC $(DEFINES)
-INCPATH       = -I. -I/opt/Qt/5.15.2/gcc_64/include -I/opt/Qt/5.15.2/gcc_64/include/QtCharts -I/opt/Qt/5.15.2/gcc_64/include/QtWidgets -I/opt/Qt/5.15.2/gcc_64/include/QtGui -I/opt/Qt/5.15.2/gcc_64/include/QtCore -I. -I/usr/include/libdrm -I/opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++
+INCPATH       = -I. -I/opt/Qt/5.15.2/gcc_64/include -I/opt/Qt/5.15.2/gcc_64/include/QtCharts -I/opt/Qt/5.15.2/gcc_64/include/QtWidgets -I/opt/Qt/5.15.2/gcc_64/include/QtGui -I/opt/Qt/5.15.2/gcc_64/include/QtSerialPort -I/opt/Qt/5.15.2/gcc_64/include/QtCore -I. -I/usr/include/libdrm -I/opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++
 QMAKE         = /opt/Qt/5.15.2/gcc_64/bin/qmake
 DEL_FILE      = rm -f
 CHK_DIR_EXISTS= test -d
@@ -40,7 +40,7 @@ DISTNAME      = jiaozhun_miniastro1.0.0
 DISTDIR = /home/q/workspace/jiaozhun_mini_astro/.tmp/jiaozhun_miniastro1.0.0
 LINK          = g++
 LFLAGS        = -Wl,-O1 -Wl,-rpath,/opt/Qt/5.15.2/gcc_64/lib
-LIBS          = $(SUBLIBS) /opt/Qt/5.15.2/gcc_64/lib/libQt5Charts.so /opt/Qt/5.15.2/gcc_64/lib/libQt5Widgets.so /opt/Qt/5.15.2/gcc_64/lib/libQt5Gui.so /opt/Qt/5.15.2/gcc_64/lib/libQt5Core.so -lGL -lpthread   
+LIBS          = $(SUBLIBS) /opt/Qt/5.15.2/gcc_64/lib/libQt5Charts.so /opt/Qt/5.15.2/gcc_64/lib/libQt5Widgets.so /opt/Qt/5.15.2/gcc_64/lib/libQt5Gui.so /opt/Qt/5.15.2/gcc_64/lib/libQt5SerialPort.so /opt/Qt/5.15.2/gcc_64/lib/libQt5Core.so -lGL -lpthread   
 AR            = ar cqs
 RANLIB        = 
 SED           = sed
@@ -56,15 +56,19 @@ SOURCES       = src/encoder_worker.cpp \
 		src/encoder_reader.cpp \
 		src/main.cpp \
 		src/mainwindow.cpp \
+		src/mount_controller.cpp \
 		src/qhyccd_minimal.cpp moc_encoder_worker.cpp \
-		moc_mainwindow.cpp
+		moc_mainwindow.cpp \
+		moc_mount_controller.cpp
 OBJECTS       = encoder_worker.o \
 		encoder_reader.o \
 		main.o \
 		mainwindow.o \
+		mount_controller.o \
 		qhyccd_minimal.o \
 		moc_encoder_worker.o \
-		moc_mainwindow.o
+		moc_mainwindow.o \
+		moc_mount_controller.o
 DIST          = /opt/Qt/5.15.2/gcc_64/mkspecs/features/spec_pre.prf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/common/unix.conf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/common/linux.conf \
@@ -261,6 +265,7 @@ DIST          = /opt/Qt/5.15.2/gcc_64/mkspecs/features/spec_pre.prf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/qt_config.prf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++/qmake.conf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/spec_post.prf \
+		.qmake.stash \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/exclusive_builds.prf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/toolchain.prf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/default_pre.prf \
@@ -283,10 +288,12 @@ DIST          = /opt/Qt/5.15.2/gcc_64/mkspecs/features/spec_pre.prf \
 		jiaozhun_miniastro.pro src/encoder_worker.h \
 		src/encoder_reader.h \
 		src/mainwindow.h \
+		src/mount_controller.h \
 		src/qhyccd_minimal.h src/encoder_worker.cpp \
 		src/encoder_reader.cpp \
 		src/main.cpp \
 		src/mainwindow.cpp \
+		src/mount_controller.cpp \
 		src/qhyccd_minimal.cpp
 QMAKE_TARGET  = jiaozhun_miniastro
 DESTDIR       = 
@@ -495,6 +502,7 @@ Makefile: jiaozhun_miniastro.pro /opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++/qmake.c
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/qt_config.prf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++/qmake.conf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/spec_post.prf \
+		.qmake.stash \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/exclusive_builds.prf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/toolchain.prf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/default_pre.prf \
@@ -712,6 +720,7 @@ Makefile: jiaozhun_miniastro.pro /opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++/qmake.c
 /opt/Qt/5.15.2/gcc_64/mkspecs/features/qt_config.prf:
 /opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++/qmake.conf:
 /opt/Qt/5.15.2/gcc_64/mkspecs/features/spec_post.prf:
+.qmake.stash:
 /opt/Qt/5.15.2/gcc_64/mkspecs/features/exclusive_builds.prf:
 /opt/Qt/5.15.2/gcc_64/mkspecs/features/toolchain.prf:
 /opt/Qt/5.15.2/gcc_64/mkspecs/features/default_pre.prf:
@@ -747,8 +756,8 @@ distdir: FORCE
 	@test -d $(DISTDIR) || mkdir -p $(DISTDIR)
 	$(COPY_FILE) --parents $(DIST) $(DISTDIR)/
 	$(COPY_FILE) --parents /opt/Qt/5.15.2/gcc_64/mkspecs/features/data/dummy.cpp $(DISTDIR)/
-	$(COPY_FILE) --parents src/encoder_worker.h src/encoder_reader.h src/mainwindow.h src/qhyccd_minimal.h $(DISTDIR)/
-	$(COPY_FILE) --parents src/encoder_worker.cpp src/encoder_reader.cpp src/main.cpp src/mainwindow.cpp src/qhyccd_minimal.cpp $(DISTDIR)/
+	$(COPY_FILE) --parents src/encoder_worker.h src/encoder_reader.h src/mainwindow.h src/mount_controller.h src/qhyccd_minimal.h $(DISTDIR)/
+	$(COPY_FILE) --parents src/encoder_worker.cpp src/encoder_reader.cpp src/main.cpp src/mainwindow.cpp src/mount_controller.cpp src/qhyccd_minimal.cpp $(DISTDIR)/
 
 
 clean: compiler_clean 
@@ -780,9 +789,9 @@ compiler_moc_predefs_clean:
 moc_predefs.h: /opt/Qt/5.15.2/gcc_64/mkspecs/features/data/dummy.cpp
 	g++ -pipe -O2 -std=gnu++1z -Wall -Wextra -dM -E -o moc_predefs.h /opt/Qt/5.15.2/gcc_64/mkspecs/features/data/dummy.cpp
 
-compiler_moc_header_make_all: moc_encoder_worker.cpp moc_mainwindow.cpp
+compiler_moc_header_make_all: moc_encoder_worker.cpp moc_mainwindow.cpp moc_mount_controller.cpp
 compiler_moc_header_clean:
-	-$(DEL_FILE) moc_encoder_worker.cpp moc_mainwindow.cpp
+	-$(DEL_FILE) moc_encoder_worker.cpp moc_mainwindow.cpp moc_mount_controller.cpp
 moc_encoder_worker.cpp: src/encoder_worker.h \
 		src/encoder_reader.h \
 		src/qhyccd_minimal.h \
@@ -851,7 +860,7 @@ moc_encoder_worker.cpp: src/encoder_worker.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qbasictimer.h \
 		moc_predefs.h \
 		/opt/Qt/5.15.2/gcc_64/bin/moc
-	/opt/Qt/5.15.2/gcc_64/bin/moc $(DEFINES) --include /home/q/workspace/jiaozhun_mini_astro/moc_predefs.h -I/opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++ -I/home/q/workspace/jiaozhun_mini_astro -I/opt/Qt/5.15.2/gcc_64/include -I/opt/Qt/5.15.2/gcc_64/include/QtCharts -I/opt/Qt/5.15.2/gcc_64/include/QtWidgets -I/opt/Qt/5.15.2/gcc_64/include/QtGui -I/opt/Qt/5.15.2/gcc_64/include/QtCore -I/usr/include/c++/9 -I/usr/include/x86_64-linux-gnu/c++/9 -I/usr/include/c++/9/backward -I/usr/lib/gcc/x86_64-linux-gnu/9/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/encoder_worker.h -o moc_encoder_worker.cpp
+	/opt/Qt/5.15.2/gcc_64/bin/moc $(DEFINES) --include /home/q/workspace/jiaozhun_mini_astro/moc_predefs.h -I/opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++ -I/home/q/workspace/jiaozhun_mini_astro -I/opt/Qt/5.15.2/gcc_64/include -I/opt/Qt/5.15.2/gcc_64/include/QtCharts -I/opt/Qt/5.15.2/gcc_64/include/QtWidgets -I/opt/Qt/5.15.2/gcc_64/include/QtGui -I/opt/Qt/5.15.2/gcc_64/include/QtSerialPort -I/opt/Qt/5.15.2/gcc_64/include/QtCore -I/usr/include/c++/9 -I/usr/include/x86_64-linux-gnu/c++/9 -I/usr/include/c++/9/backward -I/usr/lib/gcc/x86_64-linux-gnu/9/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/encoder_worker.h -o moc_encoder_worker.cpp
 
 moc_mainwindow.cpp: src/mainwindow.h \
 		src/encoder_worker.h \
@@ -920,6 +929,11 @@ moc_mainwindow.cpp: src/mainwindow.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/QTimer \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qtimer.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qbasictimer.h \
+		src/mount_controller.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/QSerialPort \
+		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/qserialport.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qiodevice.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/qserialportglobal.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QCheckBox \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qcheckbox.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qtwidgetsglobal.h \
@@ -949,7 +963,6 @@ moc_mainwindow.cpp: src/mainwindow.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtGui/qpolygon.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtGui/qregion.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qdatastream.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtCore/qiodevice.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qline.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtGui/qkeysequence.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qwidget.h \
@@ -974,19 +987,30 @@ moc_mainwindow.cpp: src/mainwindow.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qfiledevice.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtGui/qvector2d.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtGui/qtouchdevice.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QLabel \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qlabel.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qframe.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QMainWindow \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qmainwindow.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qtabwidget.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QPushButton \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qpushbutton.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QSpinBox \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qspinbox.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QComboBox \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qcombobox.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qabstractitemdelegate.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qstyleoption.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qabstractspinbox.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtGui/qvalidator.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qregularexpression.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qslider.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qabstractslider.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qstyle.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qtabbar.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qtabwidget.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qrubberband.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qframe.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qabstractitemmodel.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QDoubleSpinBox \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qspinbox.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QLabel \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qlabel.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QMainWindow \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qmainwindow.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QPushButton \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qpushbutton.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QSpinBox \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/QThread \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qthread.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qdeadlinetimer.h \
@@ -1028,7 +1052,70 @@ moc_mainwindow.cpp: src/mainwindow.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/qvalueaxis.h \
 		moc_predefs.h \
 		/opt/Qt/5.15.2/gcc_64/bin/moc
-	/opt/Qt/5.15.2/gcc_64/bin/moc $(DEFINES) --include /home/q/workspace/jiaozhun_mini_astro/moc_predefs.h -I/opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++ -I/home/q/workspace/jiaozhun_mini_astro -I/opt/Qt/5.15.2/gcc_64/include -I/opt/Qt/5.15.2/gcc_64/include/QtCharts -I/opt/Qt/5.15.2/gcc_64/include/QtWidgets -I/opt/Qt/5.15.2/gcc_64/include/QtGui -I/opt/Qt/5.15.2/gcc_64/include/QtCore -I/usr/include/c++/9 -I/usr/include/x86_64-linux-gnu/c++/9 -I/usr/include/c++/9/backward -I/usr/lib/gcc/x86_64-linux-gnu/9/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/mainwindow.h -o moc_mainwindow.cpp
+	/opt/Qt/5.15.2/gcc_64/bin/moc $(DEFINES) --include /home/q/workspace/jiaozhun_mini_astro/moc_predefs.h -I/opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++ -I/home/q/workspace/jiaozhun_mini_astro -I/opt/Qt/5.15.2/gcc_64/include -I/opt/Qt/5.15.2/gcc_64/include/QtCharts -I/opt/Qt/5.15.2/gcc_64/include/QtWidgets -I/opt/Qt/5.15.2/gcc_64/include/QtGui -I/opt/Qt/5.15.2/gcc_64/include/QtSerialPort -I/opt/Qt/5.15.2/gcc_64/include/QtCore -I/usr/include/c++/9 -I/usr/include/x86_64-linux-gnu/c++/9 -I/usr/include/c++/9/backward -I/usr/lib/gcc/x86_64-linux-gnu/9/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/mainwindow.h -o moc_mainwindow.cpp
+
+moc_mount_controller.cpp: src/mount_controller.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/QObject \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qobject.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qobjectdefs.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qnamespace.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qglobal.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qconfig-bootstrapped.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qconfig.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qtcore-config.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qsystemdetection.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qprocessordetection.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qcompilerdetection.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qtypeinfo.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qsysinfo.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qlogging.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qflags.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qatomic.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qbasicatomic.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qatomic_bootstrap.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qgenericatomic.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qatomic_cxx11.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qatomic_msvc.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qglobalstatic.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qmutex.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qnumeric.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qversiontagging.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qobjectdefs_impl.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qstring.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qchar.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qbytearray.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qrefcount.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qarraydata.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qstringliteral.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qstringalgorithms.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qstringview.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qstringbuilder.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qlist.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qalgorithms.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qiterator.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qhashfunctions.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qpair.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qvector.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qcontainertools_impl.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qpoint.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qbytearraylist.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qstringlist.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qregexp.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qstringmatcher.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qcoreevent.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qscopedpointer.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qmetatype.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qvarlengtharray.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qcontainerfwd.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qobject_impl.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/QSerialPort \
+		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/qserialport.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qiodevice.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/qserialportglobal.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/QString \
+		moc_predefs.h \
+		/opt/Qt/5.15.2/gcc_64/bin/moc
+	/opt/Qt/5.15.2/gcc_64/bin/moc $(DEFINES) --include /home/q/workspace/jiaozhun_mini_astro/moc_predefs.h -I/opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++ -I/home/q/workspace/jiaozhun_mini_astro -I/opt/Qt/5.15.2/gcc_64/include -I/opt/Qt/5.15.2/gcc_64/include/QtCharts -I/opt/Qt/5.15.2/gcc_64/include/QtWidgets -I/opt/Qt/5.15.2/gcc_64/include/QtGui -I/opt/Qt/5.15.2/gcc_64/include/QtSerialPort -I/opt/Qt/5.15.2/gcc_64/include/QtCore -I/usr/include/c++/9 -I/usr/include/x86_64-linux-gnu/c++/9 -I/usr/include/c++/9/backward -I/usr/lib/gcc/x86_64-linux-gnu/9/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/mount_controller.h -o moc_mount_controller.cpp
 
 compiler_moc_objc_header_make_all:
 compiler_moc_objc_header_clean:
@@ -1242,6 +1329,11 @@ main.o: src/main.cpp src/mainwindow.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/QTimer \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qtimer.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qbasictimer.h \
+		src/mount_controller.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/QSerialPort \
+		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/qserialport.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qiodevice.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/qserialportglobal.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QCheckBox \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qcheckbox.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qtwidgetsglobal.h \
@@ -1271,7 +1363,6 @@ main.o: src/main.cpp src/mainwindow.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtGui/qpolygon.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtGui/qregion.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qdatastream.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtCore/qiodevice.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qline.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtGui/qkeysequence.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qwidget.h \
@@ -1296,19 +1387,30 @@ main.o: src/main.cpp src/mainwindow.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qfiledevice.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtGui/qvector2d.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtGui/qtouchdevice.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QLabel \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qlabel.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qframe.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QMainWindow \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qmainwindow.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qtabwidget.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QPushButton \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qpushbutton.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QSpinBox \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qspinbox.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QComboBox \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qcombobox.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qabstractitemdelegate.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qstyleoption.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qabstractspinbox.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtGui/qvalidator.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qregularexpression.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qslider.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qabstractslider.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qstyle.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qtabbar.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qtabwidget.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qrubberband.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qframe.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qabstractitemmodel.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QDoubleSpinBox \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qspinbox.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QLabel \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qlabel.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QMainWindow \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qmainwindow.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QPushButton \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qpushbutton.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QSpinBox \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/QThread \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qthread.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qdeadlinetimer.h \
@@ -1427,6 +1529,11 @@ mainwindow.o: src/mainwindow.cpp src/mainwindow.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/QTimer \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qtimer.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qbasictimer.h \
+		src/mount_controller.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/QSerialPort \
+		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/qserialport.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qiodevice.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/qserialportglobal.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QCheckBox \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qcheckbox.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qtwidgetsglobal.h \
@@ -1456,7 +1563,6 @@ mainwindow.o: src/mainwindow.cpp src/mainwindow.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtGui/qpolygon.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtGui/qregion.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qdatastream.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtCore/qiodevice.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qline.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtGui/qkeysequence.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qwidget.h \
@@ -1481,19 +1587,30 @@ mainwindow.o: src/mainwindow.cpp src/mainwindow.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qfiledevice.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtGui/qvector2d.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtGui/qtouchdevice.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QLabel \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qlabel.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qframe.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QMainWindow \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qmainwindow.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qtabwidget.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QPushButton \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qpushbutton.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QSpinBox \
-		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qspinbox.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QComboBox \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qcombobox.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qabstractitemdelegate.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qstyleoption.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qabstractspinbox.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtGui/qvalidator.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qregularexpression.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qslider.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qabstractslider.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qstyle.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qtabbar.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qtabwidget.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qrubberband.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qframe.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qabstractitemmodel.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QDoubleSpinBox \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qspinbox.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QLabel \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qlabel.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QMainWindow \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qmainwindow.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QPushButton \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qpushbutton.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QSpinBox \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/QThread \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qthread.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qdeadlinetimer.h \
@@ -1540,9 +1657,72 @@ mainwindow.o: src/mainwindow.cpp src/mainwindow.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qlayout.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qlayoutitem.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qgridlayout.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/QSerialPortInfo \
+		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/qserialportinfo.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QVBoxLayout \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QWidget
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o mainwindow.o src/mainwindow.cpp
+
+mount_controller.o: src/mount_controller.cpp src/mount_controller.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/QObject \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qobject.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qobjectdefs.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qnamespace.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qglobal.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qconfig-bootstrapped.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qconfig.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qtcore-config.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qsystemdetection.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qprocessordetection.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qcompilerdetection.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qtypeinfo.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qsysinfo.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qlogging.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qflags.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qatomic.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qbasicatomic.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qatomic_bootstrap.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qgenericatomic.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qatomic_cxx11.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qatomic_msvc.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qglobalstatic.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qmutex.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qnumeric.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qversiontagging.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qobjectdefs_impl.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qstring.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qchar.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qbytearray.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qrefcount.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qarraydata.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qstringliteral.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qstringalgorithms.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qstringview.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qstringbuilder.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qlist.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qalgorithms.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qiterator.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qhashfunctions.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qpair.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qvector.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qcontainertools_impl.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qpoint.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qbytearraylist.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qstringlist.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qregexp.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qstringmatcher.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qcoreevent.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qscopedpointer.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qmetatype.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qvarlengtharray.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qcontainerfwd.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qobject_impl.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/QSerialPort \
+		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/qserialport.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qiodevice.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/qserialportglobal.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/QString
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o mount_controller.o src/mount_controller.cpp
 
 qhyccd_minimal.o: src/qhyccd_minimal.cpp src/qhyccd_minimal.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/QLibrary \
@@ -1609,6 +1789,9 @@ moc_encoder_worker.o: moc_encoder_worker.cpp
 
 moc_mainwindow.o: moc_mainwindow.cpp 
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o moc_mainwindow.o moc_mainwindow.cpp
+
+moc_mount_controller.o: moc_mount_controller.cpp 
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o moc_mount_controller.o moc_mount_controller.cpp
 
 ####### Install
 
