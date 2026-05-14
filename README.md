@@ -21,7 +21,7 @@ SDK 读取运行在后台线程，`Actual` 显示后台实际采样间隔，`Rea
 ## Build
 
 ```bash
-cd /home/q/workspace/jiaozhun_miniastro
+cd /home/q/workspace/jiaozhun_mini_astro
 /opt/Qt/5.15.2/gcc_64/bin/qmake jiaozhun_miniastro.pro
 make -j$(nproc)
 ```

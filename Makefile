@@ -37,7 +37,7 @@ MOVE          = mv -f
 TAR           = tar -cf
 COMPRESS      = gzip -9f
 DISTNAME      = jiaozhun_miniastro1.0.0
-DISTDIR = /home/q/workspace/jiaozhun_miniastro/.tmp/jiaozhun_miniastro1.0.0
+DISTDIR = /home/q/workspace/jiaozhun_mini_astro/.tmp/jiaozhun_miniastro1.0.0
 LINK          = g++
 LFLAGS        = -Wl,-O1 -Wl,-rpath,/opt/Qt/5.15.2/gcc_64/lib
 LIBS          = $(SUBLIBS) /opt/Qt/5.15.2/gcc_64/lib/libQt5Charts.so /opt/Qt/5.15.2/gcc_64/lib/libQt5Widgets.so /opt/Qt/5.15.2/gcc_64/lib/libQt5Gui.so /opt/Qt/5.15.2/gcc_64/lib/libQt5Core.so -lGL -lpthread   
@@ -261,7 +261,6 @@ DIST          = /opt/Qt/5.15.2/gcc_64/mkspecs/features/spec_pre.prf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/qt_config.prf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++/qmake.conf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/spec_post.prf \
-		.qmake.stash \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/exclusive_builds.prf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/toolchain.prf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/default_pre.prf \
@@ -496,7 +495,6 @@ Makefile: jiaozhun_miniastro.pro /opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++/qmake.c
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/qt_config.prf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++/qmake.conf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/spec_post.prf \
-		.qmake.stash \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/exclusive_builds.prf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/toolchain.prf \
 		/opt/Qt/5.15.2/gcc_64/mkspecs/features/default_pre.prf \
@@ -714,7 +712,6 @@ Makefile: jiaozhun_miniastro.pro /opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++/qmake.c
 /opt/Qt/5.15.2/gcc_64/mkspecs/features/qt_config.prf:
 /opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++/qmake.conf:
 /opt/Qt/5.15.2/gcc_64/mkspecs/features/spec_post.prf:
-.qmake.stash:
 /opt/Qt/5.15.2/gcc_64/mkspecs/features/exclusive_builds.prf:
 /opt/Qt/5.15.2/gcc_64/mkspecs/features/toolchain.prf:
 /opt/Qt/5.15.2/gcc_64/mkspecs/features/default_pre.prf:
@@ -854,7 +851,7 @@ moc_encoder_worker.cpp: src/encoder_worker.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qbasictimer.h \
 		moc_predefs.h \
 		/opt/Qt/5.15.2/gcc_64/bin/moc
-	/opt/Qt/5.15.2/gcc_64/bin/moc $(DEFINES) --include /home/q/workspace/jiaozhun_miniastro/moc_predefs.h -I/opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++ -I/home/q/workspace/jiaozhun_miniastro -I/opt/Qt/5.15.2/gcc_64/include -I/opt/Qt/5.15.2/gcc_64/include/QtCharts -I/opt/Qt/5.15.2/gcc_64/include/QtWidgets -I/opt/Qt/5.15.2/gcc_64/include/QtGui -I/opt/Qt/5.15.2/gcc_64/include/QtCore -I/usr/include/c++/9 -I/usr/include/x86_64-linux-gnu/c++/9 -I/usr/include/c++/9/backward -I/usr/lib/gcc/x86_64-linux-gnu/9/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/encoder_worker.h -o moc_encoder_worker.cpp
+	/opt/Qt/5.15.2/gcc_64/bin/moc $(DEFINES) --include /home/q/workspace/jiaozhun_mini_astro/moc_predefs.h -I/opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++ -I/home/q/workspace/jiaozhun_mini_astro -I/opt/Qt/5.15.2/gcc_64/include -I/opt/Qt/5.15.2/gcc_64/include/QtCharts -I/opt/Qt/5.15.2/gcc_64/include/QtWidgets -I/opt/Qt/5.15.2/gcc_64/include/QtGui -I/opt/Qt/5.15.2/gcc_64/include/QtCore -I/usr/include/c++/9 -I/usr/include/x86_64-linux-gnu/c++/9 -I/usr/include/c++/9/backward -I/usr/lib/gcc/x86_64-linux-gnu/9/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/encoder_worker.h -o moc_encoder_worker.cpp
 
 moc_mainwindow.cpp: src/mainwindow.h \
 		src/encoder_worker.h \
@@ -1031,7 +1028,7 @@ moc_mainwindow.cpp: src/mainwindow.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/qvalueaxis.h \
 		moc_predefs.h \
 		/opt/Qt/5.15.2/gcc_64/bin/moc
-	/opt/Qt/5.15.2/gcc_64/bin/moc $(DEFINES) --include /home/q/workspace/jiaozhun_miniastro/moc_predefs.h -I/opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++ -I/home/q/workspace/jiaozhun_miniastro -I/opt/Qt/5.15.2/gcc_64/include -I/opt/Qt/5.15.2/gcc_64/include/QtCharts -I/opt/Qt/5.15.2/gcc_64/include/QtWidgets -I/opt/Qt/5.15.2/gcc_64/include/QtGui -I/opt/Qt/5.15.2/gcc_64/include/QtCore -I/usr/include/c++/9 -I/usr/include/x86_64-linux-gnu/c++/9 -I/usr/include/c++/9/backward -I/usr/lib/gcc/x86_64-linux-gnu/9/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/mainwindow.h -o moc_mainwindow.cpp
+	/opt/Qt/5.15.2/gcc_64/bin/moc $(DEFINES) --include /home/q/workspace/jiaozhun_mini_astro/moc_predefs.h -I/opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++ -I/home/q/workspace/jiaozhun_mini_astro -I/opt/Qt/5.15.2/gcc_64/include -I/opt/Qt/5.15.2/gcc_64/include/QtCharts -I/opt/Qt/5.15.2/gcc_64/include/QtWidgets -I/opt/Qt/5.15.2/gcc_64/include/QtGui -I/opt/Qt/5.15.2/gcc_64/include/QtCore -I/usr/include/c++/9 -I/usr/include/x86_64-linux-gnu/c++/9 -I/usr/include/c++/9/backward -I/usr/lib/gcc/x86_64-linux-gnu/9/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/mainwindow.h -o moc_mainwindow.cpp
 
 compiler_moc_objc_header_make_all:
 compiler_moc_objc_header_clean:
