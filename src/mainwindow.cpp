@@ -6,6 +6,24 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+static constexpr double EncoderFullScale = 33554432.0;
+static constexpr double MotorStepsPerRev = 200.0;
+static constexpr double DriverMicrosteps = 256.0;
+static constexpr double GearReduction = 100.0;
+static constexpr double PulsesPerOutputRev = MotorStepsPerRev * DriverMicrosteps * GearReduction;
+static constexpr double ArcsecPerRev = 360.0 * 3600.0;
+
+static double shortestEncoderDelta(uint32_t current, uint32_t previous)
+{
+    double delta = static_cast<double>(current) - static_cast<double>(previous);
+    const double halfScale = EncoderFullScale / 2.0;
+    if (delta > halfScale)
+        delta -= EncoderFullScale;
+    else if (delta < -halfScale)
+        delta += EncoderFullScale;
+    return delta;
+}
+
 MainWindow::MainWindow(const QString &libraryPath,
                        const QString &deviceName,
                        int intervalMs,
@@ -75,10 +93,14 @@ void MainWindow::setupUi()
     values->setSpacing(16);
     m_decLabel = new QLabel(tr("DEC: --"), this);
     m_decDegreeLabel = new QLabel(tr("DEC deg: --"), this);
+    m_actualSpeedLabel = new QLabel(tr("Actual speed: --"), this);
+    m_positionErrorLabel = new QLabel(tr("Position error: --"), this);
     m_actualIntervalLabel = new QLabel(tr("Actual: --"), this);
     m_readDurationLabel = new QLabel(tr("Read: --"), this);
     values->addWidget(m_decLabel);
     values->addWidget(m_decDegreeLabel);
+    values->addWidget(m_actualSpeedLabel);
+    values->addWidget(m_positionErrorLabel);
     values->addWidget(m_actualIntervalLabel);
     values->addWidget(m_readDurationLabel);
     values->addStretch(1);
@@ -86,33 +108,83 @@ void MainWindow::setupUi()
 
     m_decSeries = new QLineSeries(this);
     m_decSeries->setName(tr("TianShanNode_EncoderDEC"));
+    m_actualSpeedSeries = new QLineSeries(this);
+    m_actualSpeedSeries->setName(tr("Actual DEC speed"));
+    m_positionErrorSeries = new QLineSeries(this);
+    m_positionErrorSeries->setName(tr("Absolute position error"));
 
-    m_chart = new QChart();
-    m_chart->legend()->setVisible(true);
-    m_chart->addSeries(m_decSeries);
-    m_chart->setTitle(tr("TianShanNode_EncoderDEC"));
+    m_encoderChart = new QChart();
+    m_encoderChart->legend()->setVisible(true);
+    m_encoderChart->addSeries(m_decSeries);
+    m_encoderChart->setTitle(tr("TianShanNode_EncoderDEC"));
 
-    m_axisX = new QValueAxis(this);
-    m_axisX->setTitleText(tr("Time (s)"));
-    m_axisX->setRange(0.0, m_visibleSeconds);
-    m_axisX->setLabelFormat("%.1f");
+    m_encoderAxisX = new QValueAxis(this);
+    m_encoderAxisX->setTitleText(tr("Time (s)"));
+    m_encoderAxisX->setRange(0.0, m_visibleSeconds);
+    m_encoderAxisX->setLabelFormat("%.1f");
 
-    m_axisY = new QValueAxis(this);
-    m_axisY->setTitleText(tr("Encoder value"));
-    m_axisY->setRange(m_minY, m_maxY);
-    m_axisY->setLabelFormat("%.0f");
+    m_encoderAxisY = new QValueAxis(this);
+    m_encoderAxisY->setTitleText(tr("Encoder value"));
+    m_encoderAxisY->setRange(0.0, 1.0);
+    m_encoderAxisY->setLabelFormat("%.0f");
 
-    m_chart->addAxis(m_axisX, Qt::AlignBottom);
-    m_chart->addAxis(m_axisY, Qt::AlignLeft);
-    m_decSeries->attachAxis(m_axisX);
-    m_decSeries->attachAxis(m_axisY);
+    m_encoderChart->addAxis(m_encoderAxisX, Qt::AlignBottom);
+    m_encoderChart->addAxis(m_encoderAxisY, Qt::AlignLeft);
+    m_decSeries->attachAxis(m_encoderAxisX);
+    m_decSeries->attachAxis(m_encoderAxisY);
 
-    m_chartView = new QChartView(m_chart, this);
-    m_chartView->setRenderHint(QPainter::Antialiasing);
-    root->addWidget(m_chartView, 1);
+    m_speedChart = new QChart();
+    m_speedChart->legend()->setVisible(true);
+    m_speedChart->addSeries(m_actualSpeedSeries);
+    m_speedChart->setTitle(tr("Actual DEC Speed"));
+
+    m_speedAxisX = new QValueAxis(this);
+    m_speedAxisX->setTitleText(tr("Time (s)"));
+    m_speedAxisX->setRange(0.0, m_visibleSeconds);
+    m_speedAxisX->setLabelFormat("%.1f");
+
+    m_speedAxisY = new QValueAxis(this);
+    m_speedAxisY->setTitleText(tr("Speed (Hz)"));
+    m_speedAxisY->setRange(-1.0, 1.0);
+    m_speedAxisY->setLabelFormat("%.1f");
+
+    m_speedChart->addAxis(m_speedAxisX, Qt::AlignBottom);
+    m_speedChart->addAxis(m_speedAxisY, Qt::AlignLeft);
+    m_actualSpeedSeries->attachAxis(m_speedAxisX);
+    m_actualSpeedSeries->attachAxis(m_speedAxisY);
+
+    m_errorChart = new QChart();
+    m_errorChart->legend()->setVisible(true);
+    m_errorChart->addSeries(m_positionErrorSeries);
+    m_errorChart->setTitle(tr("Absolute Position Error"));
+
+    m_errorAxisX = new QValueAxis(this);
+    m_errorAxisX->setTitleText(tr("Time (s)"));
+    m_errorAxisX->setRange(0.0, m_visibleSeconds);
+    m_errorAxisX->setLabelFormat("%.1f");
+
+    m_errorAxisY = new QValueAxis(this);
+    m_errorAxisY->setTitleText(tr("Error (arcsec)"));
+    m_errorAxisY->setRange(0.0, 1.0);
+    m_errorAxisY->setLabelFormat("%.2f");
+
+    m_errorChart->addAxis(m_errorAxisX, Qt::AlignBottom);
+    m_errorChart->addAxis(m_errorAxisY, Qt::AlignLeft);
+    m_positionErrorSeries->attachAxis(m_errorAxisX);
+    m_positionErrorSeries->attachAxis(m_errorAxisY);
+
+    m_encoderChartView = new QChartView(m_encoderChart, this);
+    m_speedChartView = new QChartView(m_speedChart, this);
+    m_errorChartView = new QChartView(m_errorChart, this);
+    m_encoderChartView->setRenderHint(QPainter::Antialiasing);
+    m_speedChartView->setRenderHint(QPainter::Antialiasing);
+    m_errorChartView->setRenderHint(QPainter::Antialiasing);
+    root->addWidget(m_encoderChartView, 1);
+    root->addWidget(m_speedChartView, 1);
+    root->addWidget(m_errorChartView, 1);
 
     setCentralWidget(central);
-    resize(1000, 620);
+    resize(1100, 900);
     setWindowTitle(tr("jiaozhun_miniastro Encoder Monitor"));
 
     connect(m_startButton, &QPushButton::clicked, this, &MainWindow::startReading);
@@ -193,6 +265,8 @@ void MainWindow::setupMountUi(QVBoxLayout *root)
     connect(m_decStopButton, &QPushButton::clicked, this, &MainWindow::stopDec);
     connect(m_mountController, &MountController::statusChanged, this, &MainWindow::updateMountStatus);
     connect(m_mountController, &MountController::connectionChanged, this, [this](bool connected) {
+        if (!connected)
+            setDecCommandSpeedKHz(0.0);
         m_mountConnectButton->setEnabled(!connected);
         m_mountDisconnectButton->setEnabled(connected);
         m_decPositiveButton->setEnabled(connected);
@@ -278,11 +352,13 @@ void MainWindow::updateVisibleSeconds(int seconds)
             : 0.0;
     if (currentSeconds > m_visibleSeconds) {
         const double minVisibleSeconds = currentSeconds - m_visibleSeconds;
-        m_axisX->setRange(minVisibleSeconds, currentSeconds);
-        updateYAxisForVisibleRange(minVisibleSeconds);
+        setChartXRange(minVisibleSeconds, currentSeconds);
+        updateYAxisForVisibleRange(m_decSeries, m_encoderAxisY, minVisibleSeconds, 10.0);
+        updateYAxisForVisibleRange(m_actualSpeedSeries, m_speedAxisY, minVisibleSeconds, 1.0);
+        updateYAxisForVisibleRange(m_positionErrorSeries, m_errorAxisY, minVisibleSeconds, 0.1);
     }
     else
-        m_axisX->setRange(0.0, m_visibleSeconds);
+        setChartXRange(0.0, m_visibleSeconds);
 }
 
 void MainWindow::updateStatus(const QString &message)
@@ -337,26 +413,37 @@ void MainWindow::connectMount()
 void MainWindow::disconnectMount()
 {
     m_mountController->disconnectFromPort();
+    setDecCommandSpeedKHz(0.0);
 }
 
 void MainWindow::slewDecPositive()
 {
-    m_mountController->slewDec(selectedMountSpeedKHz());
+    const double speedKHz = selectedMountSpeedKHz();
+    if (m_mountController->slewDec(speedKHz))
+        setDecCommandSpeedKHz(speedKHz);
 }
 
 void MainWindow::slewDecNegative()
 {
-    m_mountController->slewDec(-selectedMountSpeedKHz());
+    const double speedKHz = -selectedMountSpeedKHz();
+    if (m_mountController->slewDec(speedKHz))
+        setDecCommandSpeedKHz(speedKHz);
 }
 
 void MainWindow::stopDec()
 {
-    m_mountController->stopDec();
+    if (m_mountController->stopDec())
+        setDecCommandSpeedKHz(0.0);
 }
 
 double MainWindow::selectedMountSpeedKHz() const
 {
     return m_mountSpeedSpinBox ? m_mountSpeedSpinBox->value() : 1.0;
+}
+
+void MainWindow::setDecCommandSpeedKHz(double speedKHz)
+{
+    m_commandedDecSpeedHz = speedKHz * 1000.0;
 }
 
 void MainWindow::appendSample(const EncoderSample &sample)
@@ -365,38 +452,71 @@ void MainWindow::appendSample(const EncoderSample &sample)
     m_decSeries->append(seconds, sample.dec);
 
     const int maxSamples = qMax(2, static_cast<int>((m_visibleSeconds * 1000.0) / qMax(1, m_intervalMs)) + 10);
-    while (m_decSeries->count() > maxSamples)
-        m_decSeries->remove(0);
+
+    double actualSpeedHz = 0.0;
+    double errorArcsec = qAbs(m_cumulativePositionErrorCounts) / EncoderFullScale * ArcsecPerRev;
+    if (m_hasPreviousDerivedSample) {
+        const qint64 elapsedDeltaMs = sample.elapsedMs - m_previousElapsedMs;
+        if (elapsedDeltaMs > 0) {
+            const double dtSeconds = static_cast<double>(elapsedDeltaMs) / 1000.0;
+            const double encoderDeltaCounts = shortestEncoderDelta(sample.dec, m_previousDec);
+
+            // DEC+ makes encoder counts decrease and DEC- makes them increase.
+            // Negating the encoder delta puts measured speed in the same sign convention as the command.
+            actualSpeedHz = -encoderDeltaCounts / EncoderFullScale * PulsesPerOutputRev / dtSeconds;
+
+            const double theoreticalEncoderDeltaCounts =
+                    -m_commandedDecSpeedHz / PulsesPerOutputRev * EncoderFullScale * dtSeconds;
+            m_cumulativePositionErrorCounts += encoderDeltaCounts - theoreticalEncoderDeltaCounts;
+            errorArcsec = qAbs(m_cumulativePositionErrorCounts) / EncoderFullScale * ArcsecPerRev;
+        }
+    }
+
+    m_hasPreviousDerivedSample = true;
+    m_previousDec = sample.dec;
+    m_previousElapsedMs = sample.elapsedMs;
+
+    m_actualSpeedSeries->append(seconds, actualSpeedHz);
+    m_positionErrorSeries->append(seconds, errorArcsec);
 
     m_decLabel->setText(tr("DEC: %1").arg(sample.dec));
     m_decDegreeLabel->setText(tr("DEC deg: %1").arg(sample.decDegree, 0, 'f', 6));
+    m_actualSpeedLabel->setText(tr("Actual speed: %1 Hz").arg(actualSpeedHz, 0, 'f', 2));
+    m_positionErrorLabel->setText(tr("Position error: %1 arcsec").arg(errorArcsec, 0, 'f', 3));
     m_actualIntervalLabel->setText(tr("Actual: %1 ms").arg(sample.actualIntervalMs));
     m_readDurationLabel->setText(tr("Read: %1 ms").arg(sample.readDurationMs));
 
     double minVisibleSeconds = 0.0;
     if (seconds > m_visibleSeconds) {
         minVisibleSeconds = seconds - m_visibleSeconds;
-        while (m_decSeries->count() > 0 && m_decSeries->at(0).x() < minVisibleSeconds)
-            m_decSeries->remove(0);
-        m_axisX->setRange(minVisibleSeconds, seconds);
+        pruneSeries(m_decSeries, minVisibleSeconds, maxSamples);
+        pruneSeries(m_actualSpeedSeries, minVisibleSeconds, maxSamples);
+        pruneSeries(m_positionErrorSeries, minVisibleSeconds, maxSamples);
+        setChartXRange(minVisibleSeconds, seconds);
     } else {
-        m_axisX->setRange(0.0, m_visibleSeconds);
+        pruneSeries(m_decSeries, 0.0, maxSamples);
+        pruneSeries(m_actualSpeedSeries, 0.0, maxSamples);
+        pruneSeries(m_positionErrorSeries, 0.0, maxSamples);
+        setChartXRange(0.0, m_visibleSeconds);
     }
 
-    updateYAxisForVisibleRange(minVisibleSeconds);
+    updateYAxisForVisibleRange(m_decSeries, m_encoderAxisY, minVisibleSeconds, 10.0);
+    updateYAxisForVisibleRange(m_actualSpeedSeries, m_speedAxisY, minVisibleSeconds, 1.0);
+    updateYAxisForVisibleRange(m_positionErrorSeries, m_errorAxisY, minVisibleSeconds, 0.1);
 }
 
-void MainWindow::updateYAxisForVisibleRange(double minVisibleSeconds)
+void MainWindow::updateYAxisForVisibleRange(QLineSeries *series, QValueAxis *axis, double minVisibleSeconds, double minPadding)
 {
-    if (m_decSeries->count() == 0) {
-        m_axisY->setRange(0.0, 1.0);
+    if (!series || !axis || series->count() == 0) {
+        if (axis)
+            axis->setRange(0.0, 1.0);
         return;
     }
 
     bool hasVisiblePoint = false;
     double minY = 0.0;
     double maxY = 0.0;
-    const auto points = m_decSeries->pointsVector();
+    const auto points = series->pointsVector();
     for (const QPointF &point : points) {
         if (point.x() < minVisibleSeconds)
             continue;
@@ -411,24 +531,47 @@ void MainWindow::updateYAxisForVisibleRange(double minVisibleSeconds)
     }
 
     if (!hasVisiblePoint) {
-        m_axisY->setRange(0.0, 1.0);
+        axis->setRange(0.0, 1.0);
         return;
     }
 
-    m_minY = minY;
-    m_maxY = maxY;
-    m_hasSample = true;
-
-    const double padding = qMax(10.0, (m_maxY - m_minY) * 0.08);
-    m_axisY->setRange(m_minY - padding, m_maxY + padding);
+    const double padding = qMax(minPadding, (maxY - minY) * 0.08);
+    axis->setRange(minY - padding, maxY + padding);
 }
 
 void MainWindow::resetChart()
 {
     m_decSeries->clear();
-    m_minY = 0.0;
-    m_maxY = 1.0;
-    m_hasSample = false;
-    m_axisX->setRange(0.0, m_visibleSeconds);
-    m_axisY->setRange(m_minY, m_maxY);
+    m_actualSpeedSeries->clear();
+    m_positionErrorSeries->clear();
+    m_hasPreviousDerivedSample = false;
+    m_previousDec = 0;
+    m_previousElapsedMs = 0;
+    m_cumulativePositionErrorCounts = 0.0;
+    setChartXRange(0.0, m_visibleSeconds);
+    m_encoderAxisY->setRange(0.0, 1.0);
+    m_speedAxisY->setRange(-1.0, 1.0);
+    m_errorAxisY->setRange(0.0, 1.0);
+    if (m_actualSpeedLabel)
+        m_actualSpeedLabel->setText(tr("Actual speed: --"));
+    if (m_positionErrorLabel)
+        m_positionErrorLabel->setText(tr("Position error: --"));
+}
+
+void MainWindow::setChartXRange(double minSeconds, double maxSeconds)
+{
+    m_encoderAxisX->setRange(minSeconds, maxSeconds);
+    m_speedAxisX->setRange(minSeconds, maxSeconds);
+    m_errorAxisX->setRange(minSeconds, maxSeconds);
+}
+
+void MainWindow::pruneSeries(QLineSeries *series, double minVisibleSeconds, int maxSamples)
+{
+    if (!series)
+        return;
+
+    while (series->count() > maxSamples)
+        series->remove(0);
+    while (series->count() > 0 && series->at(0).x() < minVisibleSeconds)
+        series->remove(0);
 }

@@ -51,9 +51,12 @@ private:
     void updateMountStatus(const QString &message);
     void handleWorkerStopped();
     void appendSample(const EncoderSample &sample);
-    void updateYAxisForVisibleRange(double minVisibleSeconds);
+    void updateYAxisForVisibleRange(QLineSeries *series, QValueAxis *axis, double minVisibleSeconds, double minPadding);
     void resetChart();
     double selectedMountSpeedKHz() const;
+    void setDecCommandSpeedKHz(double speedKHz);
+    void setChartXRange(double minSeconds, double maxSeconds);
+    void pruneSeries(QLineSeries *series, double minVisibleSeconds, int maxSamples);
 
     QString m_libraryPath;
     QString m_deviceName;
@@ -66,6 +69,8 @@ private:
     QLabel *m_statusLabel = nullptr;
     QLabel *m_decLabel = nullptr;
     QLabel *m_decDegreeLabel = nullptr;
+    QLabel *m_actualSpeedLabel = nullptr;
+    QLabel *m_positionErrorLabel = nullptr;
     QLabel *m_actualIntervalLabel = nullptr;
     QLabel *m_readDurationLabel = nullptr;
     QPushButton *m_startButton = nullptr;
@@ -87,16 +92,28 @@ private:
     QPushButton *m_decStopButton = nullptr;
     QLabel *m_mountStatusLabel = nullptr;
 
-    QChart *m_chart = nullptr;
-    QChartView *m_chartView = nullptr;
+    QChart *m_encoderChart = nullptr;
+    QChart *m_speedChart = nullptr;
+    QChart *m_errorChart = nullptr;
+    QChartView *m_encoderChartView = nullptr;
+    QChartView *m_speedChartView = nullptr;
+    QChartView *m_errorChartView = nullptr;
     QLineSeries *m_decSeries = nullptr;
-    QValueAxis *m_axisX = nullptr;
-    QValueAxis *m_axisY = nullptr;
+    QLineSeries *m_actualSpeedSeries = nullptr;
+    QLineSeries *m_positionErrorSeries = nullptr;
+    QValueAxis *m_encoderAxisX = nullptr;
+    QValueAxis *m_encoderAxisY = nullptr;
+    QValueAxis *m_speedAxisX = nullptr;
+    QValueAxis *m_speedAxisY = nullptr;
+    QValueAxis *m_errorAxisX = nullptr;
+    QValueAxis *m_errorAxisY = nullptr;
 
-    double m_minY = 0.0;
-    double m_maxY = 1.0;
-    bool m_hasSample = false;
     double m_visibleSeconds = 60.0;
+    bool m_hasPreviousDerivedSample = false;
+    uint32_t m_previousDec = 0;
+    qint64 m_previousElapsedMs = 0;
+    double m_commandedDecSpeedHz = 0.0;
+    double m_cumulativePositionErrorCounts = 0.0;
 };
 
 #endif // MAINWINDOW_H
