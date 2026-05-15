@@ -6,6 +6,8 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <cmath>
+
 static constexpr double EncoderFullScale = 33554432.0;
 static constexpr double MotorStepsPerRev = 200.0;
 static constexpr double DriverMicrosteps = 256.0;
@@ -93,12 +95,14 @@ void MainWindow::setupUi()
     values->setSpacing(16);
     m_decLabel = new QLabel(tr("DEC: --"), this);
     m_decDegreeLabel = new QLabel(tr("DEC deg: --"), this);
+    m_commandSpeedLabel = new QLabel(tr("Command speed: --"), this);
     m_actualSpeedLabel = new QLabel(tr("Actual speed: --"), this);
     m_positionErrorLabel = new QLabel(tr("Position error: --"), this);
     m_actualIntervalLabel = new QLabel(tr("Actual: --"), this);
     m_readDurationLabel = new QLabel(tr("Read: --"), this);
     values->addWidget(m_decLabel);
     values->addWidget(m_decDegreeLabel);
+    values->addWidget(m_commandSpeedLabel);
     values->addWidget(m_actualSpeedLabel);
     values->addWidget(m_positionErrorLabel);
     values->addWidget(m_actualIntervalLabel);
@@ -108,10 +112,12 @@ void MainWindow::setupUi()
 
     m_decSeries = new QLineSeries(this);
     m_decSeries->setName(tr("TianShanNode_EncoderDEC"));
+    m_commandSpeedSeries = new QLineSeries(this);
+    m_commandSpeedSeries->setName(tr("Command DEC speed"));
     m_actualSpeedSeries = new QLineSeries(this);
     m_actualSpeedSeries->setName(tr("Actual DEC speed"));
     m_positionErrorSeries = new QLineSeries(this);
-    m_positionErrorSeries->setName(tr("Absolute position error"));
+    m_positionErrorSeries->setName(tr("Position error"));
 
     m_encoderChart = new QChart();
     m_encoderChart->legend()->setVisible(true);
@@ -132,6 +138,26 @@ void MainWindow::setupUi()
     m_encoderChart->addAxis(m_encoderAxisY, Qt::AlignLeft);
     m_decSeries->attachAxis(m_encoderAxisX);
     m_decSeries->attachAxis(m_encoderAxisY);
+
+    m_commandSpeedChart = new QChart();
+    m_commandSpeedChart->legend()->setVisible(true);
+    m_commandSpeedChart->addSeries(m_commandSpeedSeries);
+    m_commandSpeedChart->setTitle(tr("Command DEC Speed"));
+
+    m_commandSpeedAxisX = new QValueAxis(this);
+    m_commandSpeedAxisX->setTitleText(tr("Time (s)"));
+    m_commandSpeedAxisX->setRange(0.0, m_visibleSeconds);
+    m_commandSpeedAxisX->setLabelFormat("%.1f");
+
+    m_commandSpeedAxisY = new QValueAxis(this);
+    m_commandSpeedAxisY->setTitleText(tr("Speed (Hz)"));
+    m_commandSpeedAxisY->setRange(-1.0, 1.0);
+    m_commandSpeedAxisY->setLabelFormat("%.1f");
+
+    m_commandSpeedChart->addAxis(m_commandSpeedAxisX, Qt::AlignBottom);
+    m_commandSpeedChart->addAxis(m_commandSpeedAxisY, Qt::AlignLeft);
+    m_commandSpeedSeries->attachAxis(m_commandSpeedAxisX);
+    m_commandSpeedSeries->attachAxis(m_commandSpeedAxisY);
 
     m_speedChart = new QChart();
     m_speedChart->legend()->setVisible(true);
@@ -156,7 +182,7 @@ void MainWindow::setupUi()
     m_errorChart = new QChart();
     m_errorChart->legend()->setVisible(true);
     m_errorChart->addSeries(m_positionErrorSeries);
-    m_errorChart->setTitle(tr("Absolute Position Error"));
+    m_errorChart->setTitle(tr("Position Error"));
 
     m_errorAxisX = new QValueAxis(this);
     m_errorAxisX->setTitleText(tr("Time (s)"));
@@ -174,12 +200,15 @@ void MainWindow::setupUi()
     m_positionErrorSeries->attachAxis(m_errorAxisY);
 
     m_encoderChartView = new QChartView(m_encoderChart, this);
+    m_commandSpeedChartView = new QChartView(m_commandSpeedChart, this);
     m_speedChartView = new QChartView(m_speedChart, this);
     m_errorChartView = new QChartView(m_errorChart, this);
     m_encoderChartView->setRenderHint(QPainter::Antialiasing);
+    m_commandSpeedChartView->setRenderHint(QPainter::Antialiasing);
     m_speedChartView->setRenderHint(QPainter::Antialiasing);
     m_errorChartView->setRenderHint(QPainter::Antialiasing);
     root->addWidget(m_encoderChartView, 1);
+    root->addWidget(m_commandSpeedChartView, 1);
     root->addWidget(m_speedChartView, 1);
     root->addWidget(m_errorChartView, 1);
 
@@ -266,7 +295,7 @@ void MainWindow::setupMountUi(QVBoxLayout *root)
     connect(m_mountController, &MountController::statusChanged, this, &MainWindow::updateMountStatus);
     connect(m_mountController, &MountController::connectionChanged, this, [this](bool connected) {
         if (!connected)
-            setDecCommandSpeedKHz(0.0);
+            setDecSpeedState(0.0, 0.0);
         m_mountConnectButton->setEnabled(!connected);
         m_mountDisconnectButton->setEnabled(connected);
         m_decPositiveButton->setEnabled(connected);
@@ -278,6 +307,90 @@ void MainWindow::setupMountUi(QVBoxLayout *root)
     });
 
     refreshMountPorts();
+    setupGuideUi(root);
+}
+
+void MainWindow::setupGuideUi(QVBoxLayout *root)
+{
+    auto *guideToolbar = new QHBoxLayout();
+    guideToolbar->setSpacing(8);
+
+    auto *guideLabel = new QLabel(tr("Guide sim:"), this);
+
+    auto *baseLabel = new QLabel(tr("Base kHz:"), this);
+    m_guideBaseSpeedSpinBox = new QDoubleSpinBox(this);
+    m_guideBaseSpeedSpinBox->setRange(-40.0, 40.0);
+    m_guideBaseSpeedSpinBox->setDecimals(5);
+    m_guideBaseSpeedSpinBox->setSingleStep(0.001);
+    m_guideBaseSpeedSpinBox->setValue(0.05942);
+
+    auto *deltaLabel = new QLabel(tr("Delta kHz:"), this);
+    m_guideDeltaSpeedSpinBox = new QDoubleSpinBox(this);
+    m_guideDeltaSpeedSpinBox->setRange(0.001, 40.0);
+    m_guideDeltaSpeedSpinBox->setDecimals(5);
+    m_guideDeltaSpeedSpinBox->setSingleStep(0.001);
+    m_guideDeltaSpeedSpinBox->setValue(0.03500);
+
+    auto *exposureLabel = new QLabel(tr("Exposure:"), this);
+    m_guideExposureMsSpinBox = new QSpinBox(this);
+    m_guideExposureMsSpinBox->setRange(100, 10000);
+    m_guideExposureMsSpinBox->setSingleStep(100);
+    m_guideExposureMsSpinBox->setValue(1000);
+    m_guideExposureMsSpinBox->setSuffix(tr(" ms"));
+
+    auto *aggrLabel = new QLabel(tr("Agg:"), this);
+    m_guideAggressivenessSpinBox = new QSpinBox(this);
+    m_guideAggressivenessSpinBox->setRange(1, 200);
+    m_guideAggressivenessSpinBox->setValue(100);
+    m_guideAggressivenessSpinBox->setSuffix(tr(" %"));
+
+    auto *maxPulseLabel = new QLabel(tr("Max pulse:"), this);
+    m_guideMaxPulseMsSpinBox = new QSpinBox(this);
+    m_guideMaxPulseMsSpinBox->setRange(10, 10000);
+    m_guideMaxPulseMsSpinBox->setSingleStep(50);
+    m_guideMaxPulseMsSpinBox->setValue(1000);
+    m_guideMaxPulseMsSpinBox->setSuffix(tr(" ms"));
+
+    m_guideStartButton = new QPushButton(tr("Guide Start"), this);
+    m_guideStopButton = new QPushButton(tr("Guide Stop"), this);
+    m_guideStopButton->setEnabled(false);
+    m_guideRmsLabel = new QLabel(tr("DEC RMS: --"), this);
+    m_guideRmsLabel->setMinimumWidth(150);
+    m_guideStatusLabel = new QLabel(tr("Guide idle"), this);
+    m_guideStatusLabel->setMinimumWidth(260);
+
+    guideToolbar->addWidget(guideLabel);
+    guideToolbar->addWidget(baseLabel);
+    guideToolbar->addWidget(m_guideBaseSpeedSpinBox);
+    guideToolbar->addWidget(deltaLabel);
+    guideToolbar->addWidget(m_guideDeltaSpeedSpinBox);
+    guideToolbar->addWidget(exposureLabel);
+    guideToolbar->addWidget(m_guideExposureMsSpinBox);
+    guideToolbar->addWidget(aggrLabel);
+    guideToolbar->addWidget(m_guideAggressivenessSpinBox);
+    guideToolbar->addWidget(maxPulseLabel);
+    guideToolbar->addWidget(m_guideMaxPulseMsSpinBox);
+    guideToolbar->addWidget(m_guideStartButton);
+    guideToolbar->addWidget(m_guideStopButton);
+    guideToolbar->addWidget(m_guideRmsLabel);
+    guideToolbar->addWidget(m_guideStatusLabel, 1);
+    root->addLayout(guideToolbar);
+
+    m_guideExposureTimer = new QTimer(this);
+    m_guideExposureTimer->setTimerType(Qt::PreciseTimer);
+    connect(m_guideExposureTimer, &QTimer::timeout, this, &MainWindow::runGuideExposure);
+
+    m_guidePulseTimer = new QTimer(this);
+    m_guidePulseTimer->setTimerType(Qt::PreciseTimer);
+    m_guidePulseTimer->setSingleShot(true);
+    connect(m_guidePulseTimer, &QTimer::timeout, this, &MainWindow::finishGuidePulse);
+
+    connect(m_guideStartButton, &QPushButton::clicked, this, &MainWindow::startGuideSimulation);
+    connect(m_guideStopButton, &QPushButton::clicked, this, &MainWindow::stopGuideSimulation);
+    connect(m_mountController, &MountController::connectionChanged, this, [this](bool connected) {
+        if (!connected)
+            stopGuideSimulation();
+    });
 }
 
 void MainWindow::startReading()
@@ -354,6 +467,7 @@ void MainWindow::updateVisibleSeconds(int seconds)
         const double minVisibleSeconds = currentSeconds - m_visibleSeconds;
         setChartXRange(minVisibleSeconds, currentSeconds);
         updateYAxisForVisibleRange(m_decSeries, m_encoderAxisY, minVisibleSeconds, 10.0);
+        updateYAxisForVisibleRange(m_commandSpeedSeries, m_commandSpeedAxisY, minVisibleSeconds, 1.0);
         updateYAxisForVisibleRange(m_actualSpeedSeries, m_speedAxisY, minVisibleSeconds, 1.0);
         updateYAxisForVisibleRange(m_positionErrorSeries, m_errorAxisY, minVisibleSeconds, 0.1);
     }
@@ -374,6 +488,16 @@ void MainWindow::updateMountStatus(const QString &message)
         return;
 
     m_mountStatusLabel->setText(QStringLiteral("%1  %2")
+                                .arg(QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss")))
+                                .arg(message));
+}
+
+void MainWindow::updateGuideStatus(const QString &message)
+{
+    if (!m_guideStatusLabel)
+        return;
+
+    m_guideStatusLabel->setText(QStringLiteral("%1  %2")
                                 .arg(QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss")))
                                 .arg(message));
 }
@@ -413,27 +537,28 @@ void MainWindow::connectMount()
 void MainWindow::disconnectMount()
 {
     m_mountController->disconnectFromPort();
-    setDecCommandSpeedKHz(0.0);
+    setDecSpeedState(0.0, 0.0);
 }
 
 void MainWindow::slewDecPositive()
 {
+    stopGuideSimulation();
     const double speedKHz = selectedMountSpeedKHz();
-    if (m_mountController->slewDec(speedKHz))
-        setDecCommandSpeedKHz(speedKHz);
+    sendGuideSpeed(speedKHz, speedKHz);
 }
 
 void MainWindow::slewDecNegative()
 {
+    stopGuideSimulation();
     const double speedKHz = -selectedMountSpeedKHz();
-    if (m_mountController->slewDec(speedKHz))
-        setDecCommandSpeedKHz(speedKHz);
+    sendGuideSpeed(speedKHz, speedKHz);
 }
 
 void MainWindow::stopDec()
 {
+    stopGuideSimulation();
     if (m_mountController->stopDec())
-        setDecCommandSpeedKHz(0.0);
+        setDecSpeedState(0.0, 0.0);
 }
 
 double MainWindow::selectedMountSpeedKHz() const
@@ -441,20 +566,136 @@ double MainWindow::selectedMountSpeedKHz() const
     return m_mountSpeedSpinBox ? m_mountSpeedSpinBox->value() : 1.0;
 }
 
-void MainWindow::setDecCommandSpeedKHz(double speedKHz)
+void MainWindow::setDecSpeedState(double commandSpeedKHz, double referenceSpeedKHz)
 {
-    m_commandedDecSpeedHz = speedKHz * 1000.0;
+    m_commandedDecSpeedHz = commandSpeedKHz * 1000.0;
+    m_referenceDecSpeedHz = referenceSpeedKHz * 1000.0;
+}
+
+bool MainWindow::sendGuideSpeed(double commandSpeedKHz, double referenceSpeedKHz)
+{
+    const double clampedSpeedKHz = qBound(-40.0, commandSpeedKHz, 40.0);
+    if (!m_mountController->slewDec(clampedSpeedKHz))
+        return false;
+
+    setDecSpeedState(clampedSpeedKHz, referenceSpeedKHz);
+    return true;
+}
+
+double MainWindow::guideCorrectionArcsecPerSecond() const
+{
+    const double deltaKHz = m_guideDeltaSpeedSpinBox ? m_guideDeltaSpeedSpinBox->value() : 0.035;
+    return deltaKHz * 1000.0 / PulsesPerOutputRev * ArcsecPerRev;
+}
+
+void MainWindow::startGuideSimulation()
+{
+    if (!m_mountController->isConnected()) {
+        updateGuideStatus(tr("Connect mount serial first"));
+        return;
+    }
+
+    const double baseSpeedKHz = m_guideBaseSpeedSpinBox->value();
+    if (!sendGuideSpeed(baseSpeedKHz, baseSpeedKHz))
+        return;
+
+    m_cumulativePositionErrorCounts = 0.0;
+    m_signedPositionErrorArcsec = 0.0;
+    m_positionErrorSeries->clear();
+    resetGuideRms();
+    m_guideActive = true;
+    m_guidePulseActive = false;
+    m_guideExposureTimer->start(m_guideExposureMsSpinBox->value());
+    m_guideStartButton->setEnabled(false);
+    m_guideStopButton->setEnabled(true);
+    updateGuideStatus(tr("Guide running at base %1 kHz").arg(baseSpeedKHz, 0, 'f', 5));
+}
+
+void MainWindow::stopGuideSimulation()
+{
+    if (!m_guideActive && !m_guidePulseActive)
+        return;
+
+    m_guideActive = false;
+    m_guidePulseActive = false;
+    if (m_guideExposureTimer)
+        m_guideExposureTimer->stop();
+    if (m_guidePulseTimer)
+        m_guidePulseTimer->stop();
+    if (m_guideStartButton)
+        m_guideStartButton->setEnabled(true);
+    if (m_guideStopButton)
+        m_guideStopButton->setEnabled(false);
+
+    if (m_mountController->isConnected()) {
+        const double baseSpeedKHz = m_guideBaseSpeedSpinBox ? m_guideBaseSpeedSpinBox->value() : 0.05942;
+        sendGuideSpeed(baseSpeedKHz, baseSpeedKHz);
+    }
+    resetGuideRms();
+    updateGuideStatus(tr("Guide stopped"));
+}
+
+void MainWindow::runGuideExposure()
+{
+    if (!m_guideActive || m_guidePulseActive || !m_mountController->isConnected())
+        return;
+
+    if (m_elapsed.isValid())
+        appendGuideErrorSample(m_elapsed.elapsed(), m_signedPositionErrorArcsec);
+
+    const double correctionRateArcsecPerSecond = guideCorrectionArcsecPerSecond();
+    if (correctionRateArcsecPerSecond <= 0.0)
+        return;
+
+    const double errorArcsec = m_signedPositionErrorArcsec;
+    const double aggr = static_cast<double>(m_guideAggressivenessSpinBox->value()) / 100.0;
+    int pulseMs = static_cast<int>(qRound(qAbs(errorArcsec) / correctionRateArcsecPerSecond * 1000.0 * aggr));
+    pulseMs = qBound(0, pulseMs, m_guideMaxPulseMsSpinBox->value());
+
+    if (pulseMs < 1) {
+        updateGuideStatus(tr("Guide idle, error %1 arcsec").arg(errorArcsec, 0, 'f', 3));
+        return;
+    }
+
+    const double baseSpeedKHz = m_guideBaseSpeedSpinBox->value();
+    const double deltaSpeedKHz = m_guideDeltaSpeedSpinBox->value();
+    const double correctionSpeedKHz = errorArcsec >= 0.0 ? deltaSpeedKHz : -deltaSpeedKHz;
+    const double pulseSpeedKHz = baseSpeedKHz + correctionSpeedKHz;
+
+    if (!sendGuideSpeed(pulseSpeedKHz, baseSpeedKHz))
+        return;
+
+    m_guidePulseActive = true;
+    m_guidePulseTimer->start(pulseMs);
+    updateGuideStatus(tr("Pulse %1 ms at %2 kHz, error %3 arcsec")
+                      .arg(pulseMs)
+                      .arg(pulseSpeedKHz, 0, 'f', 5)
+                      .arg(errorArcsec, 0, 'f', 3));
+}
+
+void MainWindow::finishGuidePulse()
+{
+    if (!m_guideActive || !m_mountController->isConnected()) {
+        m_guidePulseActive = false;
+        return;
+    }
+
+    const double baseSpeedKHz = m_guideBaseSpeedSpinBox->value();
+    if (sendGuideSpeed(baseSpeedKHz, baseSpeedKHz))
+        updateGuideStatus(tr("Back to base %1 kHz").arg(baseSpeedKHz, 0, 'f', 5));
+    m_guidePulseActive = false;
 }
 
 void MainWindow::appendSample(const EncoderSample &sample)
 {
     const double seconds = static_cast<double>(sample.elapsedMs) / 1000.0;
     m_decSeries->append(seconds, sample.dec);
+    m_commandSpeedSeries->append(seconds, m_commandedDecSpeedHz);
 
     const int maxSamples = qMax(2, static_cast<int>((m_visibleSeconds * 1000.0) / qMax(1, m_intervalMs)) + 10);
 
     double actualSpeedHz = 0.0;
-    double errorArcsec = qAbs(m_cumulativePositionErrorCounts) / EncoderFullScale * ArcsecPerRev;
+    double errorArcsec = m_signedPositionErrorArcsec;
     if (m_hasPreviousDerivedSample) {
         const qint64 elapsedDeltaMs = sample.elapsedMs - m_previousElapsedMs;
         if (elapsedDeltaMs > 0) {
@@ -466,9 +707,10 @@ void MainWindow::appendSample(const EncoderSample &sample)
             actualSpeedHz = -encoderDeltaCounts / EncoderFullScale * PulsesPerOutputRev / dtSeconds;
 
             const double theoreticalEncoderDeltaCounts =
-                    -m_commandedDecSpeedHz / PulsesPerOutputRev * EncoderFullScale * dtSeconds;
+                    -m_referenceDecSpeedHz / PulsesPerOutputRev * EncoderFullScale * dtSeconds;
             m_cumulativePositionErrorCounts += encoderDeltaCounts - theoreticalEncoderDeltaCounts;
-            errorArcsec = qAbs(m_cumulativePositionErrorCounts) / EncoderFullScale * ArcsecPerRev;
+            m_signedPositionErrorArcsec = m_cumulativePositionErrorCounts / EncoderFullScale * ArcsecPerRev;
+            errorArcsec = m_signedPositionErrorArcsec;
         }
     }
 
@@ -481,6 +723,7 @@ void MainWindow::appendSample(const EncoderSample &sample)
 
     m_decLabel->setText(tr("DEC: %1").arg(sample.dec));
     m_decDegreeLabel->setText(tr("DEC deg: %1").arg(sample.decDegree, 0, 'f', 6));
+    m_commandSpeedLabel->setText(tr("Command speed: %1 Hz").arg(m_commandedDecSpeedHz, 0, 'f', 2));
     m_actualSpeedLabel->setText(tr("Actual speed: %1 Hz").arg(actualSpeedHz, 0, 'f', 2));
     m_positionErrorLabel->setText(tr("Position error: %1 arcsec").arg(errorArcsec, 0, 'f', 3));
     m_actualIntervalLabel->setText(tr("Actual: %1 ms").arg(sample.actualIntervalMs));
@@ -490,17 +733,20 @@ void MainWindow::appendSample(const EncoderSample &sample)
     if (seconds > m_visibleSeconds) {
         minVisibleSeconds = seconds - m_visibleSeconds;
         pruneSeries(m_decSeries, minVisibleSeconds, maxSamples);
+        pruneSeries(m_commandSpeedSeries, minVisibleSeconds, maxSamples);
         pruneSeries(m_actualSpeedSeries, minVisibleSeconds, maxSamples);
         pruneSeries(m_positionErrorSeries, minVisibleSeconds, maxSamples);
         setChartXRange(minVisibleSeconds, seconds);
     } else {
         pruneSeries(m_decSeries, 0.0, maxSamples);
+        pruneSeries(m_commandSpeedSeries, 0.0, maxSamples);
         pruneSeries(m_actualSpeedSeries, 0.0, maxSamples);
         pruneSeries(m_positionErrorSeries, 0.0, maxSamples);
         setChartXRange(0.0, m_visibleSeconds);
     }
 
     updateYAxisForVisibleRange(m_decSeries, m_encoderAxisY, minVisibleSeconds, 10.0);
+    updateYAxisForVisibleRange(m_commandSpeedSeries, m_commandSpeedAxisY, minVisibleSeconds, 1.0);
     updateYAxisForVisibleRange(m_actualSpeedSeries, m_speedAxisY, minVisibleSeconds, 1.0);
     updateYAxisForVisibleRange(m_positionErrorSeries, m_errorAxisY, minVisibleSeconds, 0.1);
 }
@@ -542,6 +788,7 @@ void MainWindow::updateYAxisForVisibleRange(QLineSeries *series, QValueAxis *axi
 void MainWindow::resetChart()
 {
     m_decSeries->clear();
+    m_commandSpeedSeries->clear();
     m_actualSpeedSeries->clear();
     m_positionErrorSeries->clear();
     m_hasPreviousDerivedSample = false;
@@ -550,17 +797,53 @@ void MainWindow::resetChart()
     m_cumulativePositionErrorCounts = 0.0;
     setChartXRange(0.0, m_visibleSeconds);
     m_encoderAxisY->setRange(0.0, 1.0);
+    m_commandSpeedAxisY->setRange(-1.0, 1.0);
     m_speedAxisY->setRange(-1.0, 1.0);
     m_errorAxisY->setRange(0.0, 1.0);
+    if (m_commandSpeedLabel)
+        m_commandSpeedLabel->setText(tr("Command speed: --"));
     if (m_actualSpeedLabel)
         m_actualSpeedLabel->setText(tr("Actual speed: --"));
     if (m_positionErrorLabel)
         m_positionErrorLabel->setText(tr("Position error: --"));
+    resetGuideRms();
+}
+
+void MainWindow::appendGuideErrorSample(qint64 elapsedMs, double errorArcsec)
+{
+    m_guideErrorSamples.append(QPointF(static_cast<double>(elapsedMs), errorArcsec));
+
+    const double minKeepMs = static_cast<double>(elapsedMs) - m_visibleSeconds * 1000.0;
+    while (!m_guideErrorSamples.isEmpty() && m_guideErrorSamples.first().x() < minKeepMs)
+        m_guideErrorSamples.removeFirst();
+
+    if (m_guideRmsLabel)
+        m_guideRmsLabel->setText(tr("DEC RMS: %1 arcsec").arg(currentGuideRmsArcsec(), 0, 'f', 3));
+}
+
+double MainWindow::currentGuideRmsArcsec() const
+{
+    if (m_guideErrorSamples.isEmpty())
+        return 0.0;
+
+    double sumSquares = 0.0;
+    for (const QPointF &sample : m_guideErrorSamples)
+        sumSquares += sample.y() * sample.y();
+
+    return std::sqrt(sumSquares / static_cast<double>(m_guideErrorSamples.size()));
+}
+
+void MainWindow::resetGuideRms()
+{
+    m_guideErrorSamples.clear();
+    if (m_guideRmsLabel)
+        m_guideRmsLabel->setText(tr("DEC RMS: --"));
 }
 
 void MainWindow::setChartXRange(double minSeconds, double maxSeconds)
 {
     m_encoderAxisX->setRange(minSeconds, maxSeconds);
+    m_commandSpeedAxisX->setRange(minSeconds, maxSeconds);
     m_speedAxisX->setRange(minSeconds, maxSeconds);
     m_errorAxisX->setRange(minSeconds, maxSeconds);
 }
