@@ -22,6 +22,7 @@ public slots:
     void disconnectFromPort();
     bool slewDec(double speedKHz);
     bool stopDec();
+    bool sendCommand(const QString &line);
 
 signals:
     void connectionChanged(bool connected);

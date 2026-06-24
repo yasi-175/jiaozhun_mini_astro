@@ -22,8 +22,8 @@ QT_BEGIN_MOC_NAMESPACE
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_DEPRECATED
 struct qt_meta_stringdata_MountController_t {
-    QByteArrayData data[19];
-    char stringdata0[236];
+    QByteArrayData data[20];
+    char stringdata0[248];
 };
 #define QT_MOC_LITERAL(idx, ofs, len) \
     Q_STATIC_BYTE_ARRAY_DATA_HEADER_INITIALIZER_WITH_OFFSET(len, \
@@ -47,19 +47,20 @@ QT_MOC_LITERAL(11, 121, 18), // "disconnectFromPort"
 QT_MOC_LITERAL(12, 140, 7), // "slewDec"
 QT_MOC_LITERAL(13, 148, 8), // "speedKHz"
 QT_MOC_LITERAL(14, 157, 7), // "stopDec"
-QT_MOC_LITERAL(15, 165, 17), // "readAvailableData"
-QT_MOC_LITERAL(16, 183, 17), // "handleSerialError"
-QT_MOC_LITERAL(17, 201, 28), // "QSerialPort::SerialPortError"
-QT_MOC_LITERAL(18, 230, 5) // "error"
+QT_MOC_LITERAL(15, 165, 11), // "sendCommand"
+QT_MOC_LITERAL(16, 177, 17), // "readAvailableData"
+QT_MOC_LITERAL(17, 195, 17), // "handleSerialError"
+QT_MOC_LITERAL(18, 213, 28), // "QSerialPort::SerialPortError"
+QT_MOC_LITERAL(19, 242, 5) // "error"
 
     },
     "MountController\0connectionChanged\0\0"
     "connected\0statusChanged\0message\0"
     "responseReceived\0line\0connectToPort\0"
     "portName\0baudRate\0disconnectFromPort\0"
-    "slewDec\0speedKHz\0stopDec\0readAvailableData\0"
-    "handleSerialError\0QSerialPort::SerialPortError\0"
-    "error"
+    "slewDec\0speedKHz\0stopDec\0sendCommand\0"
+    "readAvailableData\0handleSerialError\0"
+    "QSerialPort::SerialPortError\0error"
 };
 #undef QT_MOC_LITERAL
 
@@ -69,7 +70,7 @@ static const uint qt_meta_data_MountController[] = {
        8,       // revision
        0,       // classname
        0,    0, // classinfo
-       9,   14, // methods
+      10,   14, // methods
        0,    0, // properties
        0,    0, // enums/sets
        0,    0, // constructors
@@ -77,17 +78,18 @@ static const uint qt_meta_data_MountController[] = {
        3,       // signalCount
 
  // signals: name, argc, parameters, tag, flags
-       1,    1,   59,    2, 0x06 /* Public */,
-       4,    1,   62,    2, 0x06 /* Public */,
-       6,    1,   65,    2, 0x06 /* Public */,
+       1,    1,   64,    2, 0x06 /* Public */,
+       4,    1,   67,    2, 0x06 /* Public */,
+       6,    1,   70,    2, 0x06 /* Public */,
 
  // slots: name, argc, parameters, tag, flags
-       8,    2,   68,    2, 0x0a /* Public */,
-      11,    0,   73,    2, 0x0a /* Public */,
-      12,    1,   74,    2, 0x0a /* Public */,
-      14,    0,   77,    2, 0x0a /* Public */,
-      15,    0,   78,    2, 0x08 /* Private */,
-      16,    1,   79,    2, 0x08 /* Private */,
+       8,    2,   73,    2, 0x0a /* Public */,
+      11,    0,   78,    2, 0x0a /* Public */,
+      12,    1,   79,    2, 0x0a /* Public */,
+      14,    0,   82,    2, 0x0a /* Public */,
+      15,    1,   83,    2, 0x0a /* Public */,
+      16,    0,   86,    2, 0x08 /* Private */,
+      17,    1,   87,    2, 0x08 /* Private */,
 
  // signals: parameters
     QMetaType::Void, QMetaType::Bool,    3,
@@ -99,8 +101,9 @@ static const uint qt_meta_data_MountController[] = {
     QMetaType::Void,
     QMetaType::Bool, QMetaType::Double,   13,
     QMetaType::Bool,
+    QMetaType::Bool, QMetaType::QString,    7,
     QMetaType::Void,
-    QMetaType::Void, 0x80000000 | 17,   18,
+    QMetaType::Void, 0x80000000 | 18,   19,
 
        0        // eod
 };
@@ -121,8 +124,10 @@ void MountController::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int 
             if (_a[0]) *reinterpret_cast< bool*>(_a[0]) = std::move(_r); }  break;
         case 6: { bool _r = _t->stopDec();
             if (_a[0]) *reinterpret_cast< bool*>(_a[0]) = std::move(_r); }  break;
-        case 7: _t->readAvailableData(); break;
-        case 8: _t->handleSerialError((*reinterpret_cast< QSerialPort::SerialPortError(*)>(_a[1]))); break;
+        case 7: { bool _r = _t->sendCommand((*reinterpret_cast< const QString(*)>(_a[1])));
+            if (_a[0]) *reinterpret_cast< bool*>(_a[0]) = std::move(_r); }  break;
+        case 8: _t->readAvailableData(); break;
+        case 9: _t->handleSerialError((*reinterpret_cast< QSerialPort::SerialPortError(*)>(_a[1]))); break;
         default: ;
         }
     } else if (_c == QMetaObject::IndexOfMethod) {
@@ -180,13 +185,13 @@ int MountController::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 9)
+        if (_id < 10)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 9;
+        _id -= 10;
     } else if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 9)
+        if (_id < 10)
             *reinterpret_cast<int*>(_a[0]) = -1;
-        _id -= 9;
+        _id -= 10;
     }
     return _id;
 }

@@ -1014,6 +1014,7 @@ moc_mainwindow.cpp: src/mainwindow.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/QThread \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qthread.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qdeadlinetimer.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/QVector \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/QChartView \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/qchartview.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/QAbstractAxis \
@@ -1048,6 +1049,8 @@ moc_mainwindow.cpp: src/mainwindow.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/qlineseries.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/QXYSeries \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/qxyseries.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCharts/QScatterSeries \
+		/opt/Qt/5.15.2/gcc_64/include/QtCharts/qscatterseries.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/QValueAxis \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/qvalueaxis.h \
 		moc_predefs.h \
@@ -1113,6 +1116,7 @@ moc_mount_controller.cpp: src/mount_controller.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qiodevice.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/qserialportglobal.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/QString \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/QtGlobal \
 		moc_predefs.h \
 		/opt/Qt/5.15.2/gcc_64/bin/moc
 	/opt/Qt/5.15.2/gcc_64/bin/moc $(DEFINES) --include /home/q/workspace/jiaozhun_mini_astro/moc_predefs.h -I/opt/Qt/5.15.2/gcc_64/mkspecs/linux-g++ -I/home/q/workspace/jiaozhun_mini_astro -I/opt/Qt/5.15.2/gcc_64/include -I/opt/Qt/5.15.2/gcc_64/include/QtCharts -I/opt/Qt/5.15.2/gcc_64/include/QtWidgets -I/opt/Qt/5.15.2/gcc_64/include/QtGui -I/opt/Qt/5.15.2/gcc_64/include/QtSerialPort -I/opt/Qt/5.15.2/gcc_64/include/QtCore -I/usr/include/c++/9 -I/usr/include/x86_64-linux-gnu/c++/9 -I/usr/include/c++/9/backward -I/usr/lib/gcc/x86_64-linux-gnu/9/include -I/usr/local/include -I/usr/include/x86_64-linux-gnu -I/usr/include src/mount_controller.h -o moc_mount_controller.cpp
@@ -1414,6 +1418,7 @@ main.o: src/main.cpp src/mainwindow.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/QThread \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qthread.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qdeadlinetimer.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/QVector \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/QChartView \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/qchartview.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/QAbstractAxis \
@@ -1448,6 +1453,8 @@ main.o: src/main.cpp src/mainwindow.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/qlineseries.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/QXYSeries \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/qxyseries.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCharts/QScatterSeries \
+		/opt/Qt/5.15.2/gcc_64/include/QtCharts/qscatterseries.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/QValueAxis \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/qvalueaxis.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QApplication \
@@ -1614,6 +1621,7 @@ mainwindow.o: src/mainwindow.cpp src/mainwindow.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/QThread \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qthread.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qdeadlinetimer.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/QVector \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/QChartView \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/qchartview.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/QAbstractAxis \
@@ -1648,17 +1656,27 @@ mainwindow.o: src/mainwindow.cpp src/mainwindow.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/qlineseries.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/QXYSeries \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/qxyseries.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCharts/QScatterSeries \
+		/opt/Qt/5.15.2/gcc_64/include/QtCharts/qscatterseries.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/QValueAxis \
 		/opt/Qt/5.15.2/gcc_64/include/QtCharts/qvalueaxis.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/QDateTime \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qdatetime.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/QCoreApplication \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qcoreapplication.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/qeventloop.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/QDeadlineTimer \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/QFile \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QHBoxLayout \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qboxlayout.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qlayout.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qlayoutitem.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/qgridlayout.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/QRegularExpression \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/QSignalBlocker \
 		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/QSerialPortInfo \
 		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/qserialportinfo.h \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/QTextStream \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QVBoxLayout \
 		/opt/Qt/5.15.2/gcc_64/include/QtWidgets/QWidget
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o mainwindow.o src/mainwindow.cpp
@@ -1721,7 +1739,8 @@ mount_controller.o: src/mount_controller.cpp src/mount_controller.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/qserialport.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtCore/qiodevice.h \
 		/opt/Qt/5.15.2/gcc_64/include/QtSerialPort/qserialportglobal.h \
-		/opt/Qt/5.15.2/gcc_64/include/QtCore/QString
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/QString \
+		/opt/Qt/5.15.2/gcc_64/include/QtCore/QtGlobal
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o mount_controller.o src/mount_controller.cpp
 
 qhyccd_minimal.o: src/qhyccd_minimal.cpp src/qhyccd_minimal.h \

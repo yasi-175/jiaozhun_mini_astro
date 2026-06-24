@@ -81,6 +81,11 @@ bool MountController::stopDec()
     return ok;
 }
 
+bool MountController::sendCommand(const QString &line)
+{
+    return sendLine(line);
+}
+
 void MountController::readAvailableData()
 {
     m_readBuffer += m_serial.readAll();
