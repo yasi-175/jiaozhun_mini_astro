@@ -115,6 +115,7 @@ private:
     void handleMtRawResponse(const QString &line);
     void handleMtMonitorRawResponse(const QString &line);
     void handleCalStatusResponse(const QString &line);
+    void handleFirmwareMtPhaseResponse(const QString &line);
     void requestMtMonitorSample(const EncoderSample &sample);
     void appendMtMonitorSample(uint32_t tama25, uint32_t raw21, qint64 elapsedMs);
     void finishMtPhaseScan(bool aborted);
@@ -399,6 +400,21 @@ private:
     bool m_mtPhaseRefValid = false;
     int m_mtPhaseRefIdx = 0;
     bool m_mtPhaseRestorePecEnabled = false;
+    QString m_mtPhaseLocalSummary;
+    QString m_mtPhaseFirmwareSummary;
+    struct FirmwareMtPhaseResult {
+        bool valid = false;
+        bool done = false;
+        int peakBin = 0;
+        double peakBinFloat = 0.0;
+        int peakErrBins = 0;
+        uint32_t coverageBins = 0;
+        uint32_t samples = 0;
+        double peakToPeakArcsec = 0.0;
+        double residualRmsArcsec = 0.0;
+        int startIdx = 0;
+    };
+    FirmwareMtPhaseResult m_firmwareMtPhaseResult;
     enum class GotoPhaseTestState {
         Idle,
         FirstMove,

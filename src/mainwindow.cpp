@@ -525,6 +525,8 @@ void MainWindow::setupGuideUi(QVBoxLayout *root)
     m_mtPhaseStopButton->setEnabled(false);
     m_mtPhaseStatusLabel = new QLabel(tr("MT phase idle"), this);
     m_mtPhaseStatusLabel->setMinimumWidth(420);
+    m_mtPhaseStatusLabel->setWordWrap(true);
+    m_mtPhaseStatusLabel->setMinimumHeight(44);
     m_pecStatusLabel = new QLabel(tr("PEC idle"), this);
     m_pecStatusLabel->setMinimumWidth(240);
     m_mtCalSpeedSpinBox = new QDoubleSpinBox(this);
@@ -847,6 +849,7 @@ void MainWindow::handleMountResponse(const QString &line)
     }
 
     handleCalStatusResponse(line);
+    handleFirmwareMtPhaseResponse(line);
     handleMtRawResponse(line);
     handleMtMonitorRawResponse(line);
 }
@@ -1908,6 +1911,9 @@ void MainWindow::startMtPhaseScan()
         stopHysteresisAutoTest();
 
     m_mtPhaseScanSamples.clear();
+    m_firmwareMtPhaseResult = FirmwareMtPhaseResult{};
+    m_mtPhaseLocalSummary.clear();
+    m_mtPhaseFirmwareSummary.clear();
     m_mtPhaseScanActive = true;
     m_mtPhaseScanStartMs = -1;
     m_mtPhaseScanLastStatusMs = -1;
@@ -1926,14 +1932,18 @@ void MainWindow::startMtPhaseScan()
     if (m_mtPhaseStopButton)
         m_mtPhaseStopButton->setEnabled(true);
 
+    m_mountController->sendCommand(QStringLiteral("PEC:MTSCAN,STOP"));
     m_mountController->sendCommand(QStringLiteral("PEC:DISABLE"));
     m_mountController->sendCommand(QStringLiteral("PEC:STATUS"));
 
     if (sendGuideSpeed(MtPhaseScanSpeedKHz, MtPhaseScanSpeedKHz)) {
+        m_mountController->sendCommand(QStringLiteral("PEC:MTSCAN,START,%1,%2")
+                                       .arg(MtPhaseScanSpeedKHz, 0, 'f', 3)
+                                       .arg(MtPhaseScanDurationMs));
         const double periodSeconds = static_cast<double>(PecPeriodSteps) / qAbs(m_mtPhaseScanSpeedHz);
         const double scanCycles = static_cast<double>(MtPhaseScanDurationMs) / 1000.0 / periodSeconds;
         if (m_mtPhaseStatusLabel)
-            m_mtPhaseStatusLabel->setText(tr("MT phase verify 0/%1s at %2 kHz, ref_idx=%3, period=%4s cycles=%5")
+            m_mtPhaseStatusLabel->setText(tr("MT phase verify 0/%1s at %2 kHz, ref_idx=%3, period=%4s cycles=%5 fw=running")
                                           .arg(MtPhaseScanDurationMs / 1000)
                                           .arg(MtPhaseScanSpeedKHz, 0, 'f', 3)
                                           .arg(refOk ? QString::number(refIdx) : QStringLiteral("--"))
@@ -2255,8 +2265,8 @@ void MainWindow::beginBacklashMeasurement(int dir)
     m_backlashCurrentDir = dir >= 0 ? 1 : -1;
     m_backlashState = BacklashState::Measuring;
     m_backlashConsecutive = 0;
-    m_backlashReverseMs = m_elapsed.isValid() ? m_elapsed.elapsed() : 0;
-    m_backlashReverseDec = m_previousDec;
+    m_backlashReverseMs = -1;
+    m_backlashReverseDec = 0;
     const double speedKHz = m_backlashSpeedSpinBox->value() * static_cast<double>(m_backlashCurrentDir);
     sendGuideSpeed(speedKHz, speedKHz);
     updateBacklashStatus(tr("Measuring %1 after reversal").arg(m_backlashCurrentDir > 0 ? "+" : "-"));
@@ -2266,13 +2276,45 @@ void MainWindow::processBacklashSample(const EncoderSample &sample, double actua
 {
     if (!m_backlashActive || m_backlashState != BacklashState::Measuring)
         return;
-    if (m_backlashReverseMs <= 0)
+
+    if (m_backlashReverseMs < 0) {
+        m_backlashReverseMs = sample.elapsedMs;
+        m_backlashReverseDec = sample.dec;
+        m_backlashConsecutive = 0;
+        return;
+    }
+
+    const qint64 elapsedMs = sample.elapsedMs - m_backlashReverseMs;
+    if (elapsedMs <= 0)
         return;
 
-    const double movedArcsec = shortestEncoderDelta(sample.dec, m_backlashReverseDec) / EncoderFullScale * ArcsecPerRev;
-    const bool directionMatched = (m_backlashCurrentDir > 0 && actualSpeedHz > 0.0)
-            || (m_backlashCurrentDir < 0 && actualSpeedHz < 0.0);
-    if (directionMatched && qAbs(movedArcsec) >= m_backlashMoveThresholdArcsec) {
+    const double speedHz = m_backlashSpeedSpinBox->value() * 1000.0;
+    const double elapsedSteps = static_cast<double>(elapsedMs) / 1000.0 * speedHz;
+    const double maxSteps = qMax(5000.0, speedHz * 20.0);
+    if (elapsedSteps > maxSteps) {
+        m_backlashActive = false;
+        m_backlashState = BacklashState::Idle;
+        if (m_backlashTimer)
+            m_backlashTimer->stop();
+        if (m_mountController->isConnected())
+            m_mountController->stopDec();
+        setDecSpeedState(0.0, 0.0);
+        m_backlashStartButton->setEnabled(true);
+        m_backlashStopButton->setEnabled(false);
+        updateBacklashStatus(tr("Timeout %1 no valid movement within %2 steps")
+                             .arg(m_backlashCurrentDir > 0 ? "+ direction" : "- direction")
+                             .arg(elapsedSteps, 0, 'f', 0));
+        return;
+    }
+
+    const double movedArcsecRaw = shortestEncoderDelta(sample.dec, m_backlashReverseDec) / EncoderFullScale * ArcsecPerRev;
+    // DEC+ makes encoder counts decrease, so negate raw encoder motion to put it
+    // in the same sign convention as the command speed.
+    const double movedArcsecCommandSign = -movedArcsecRaw;
+    const double directedMoveArcsec = movedArcsecCommandSign * static_cast<double>(m_backlashCurrentDir);
+    const double minActualSpeedHz = qMax(5.0, speedHz * 0.10);
+    const bool directionMatched = (actualSpeedHz * static_cast<double>(m_backlashCurrentDir)) >= minActualSpeedHz;
+    if (directionMatched && directedMoveArcsec >= m_backlashMoveThresholdArcsec) {
         ++m_backlashConsecutive;
     } else {
         m_backlashConsecutive = 0;
@@ -2281,13 +2323,7 @@ void MainWindow::processBacklashSample(const EncoderSample &sample, double actua
     if (m_backlashConsecutive < 3)
         return;
 
-    const qint64 elapsedMs = sample.elapsedMs - m_backlashReverseMs;
-    if (elapsedMs <= 0)
-        return;
-
-    const double steps = static_cast<double>(elapsedMs) / 1000.0
-            * m_backlashSpeedSpinBox->value() * 1000.0;
-    recordBacklashResult(steps);
+    recordBacklashResult(elapsedSteps);
 
     if (m_backlashCurrentDir > 0)
         ++m_backlashCyclesDone;
@@ -2420,6 +2456,62 @@ void MainWindow::handleCalStatusResponse(const QString &line)
     m_mtMonitorOffset25 = offsetMatch.captured(1).toInt();
     m_mtMonitorDirInverted = dirMatch.captured(1).toInt() != 0 ? 1 : 0;
     m_mtMonitorHasCalStatus = true;
+}
+
+void MainWindow::handleFirmwareMtPhaseResponse(const QString &line)
+{
+    if (!line.startsWith(QStringLiteral("PEC:MTSCAN,DONE")))
+        return;
+
+    static const QRegularExpression peakRe(QStringLiteral("peak=(-?\\d+)"));
+    static const QRegularExpression peakfRe(QStringLiteral("peakf=([\\-\\d\\.]+)"));
+    static const QRegularExpression peakErrRe(QStringLiteral("peak_err=(-?\\d+)"));
+    static const QRegularExpression covRe(QStringLiteral("cov=(\\d+)/(\\d+)"));
+    static const QRegularExpression samplesRe(QStringLiteral("samples=(\\d+)"));
+    static const QRegularExpression ppRe(QStringLiteral("pp=([\\-\\d\\.]+)"));
+    static const QRegularExpression rmsRe(QStringLiteral("rms=([\\-\\d\\.]+)"));
+    static const QRegularExpression startRe(QStringLiteral("start_idx=(\\d+)"));
+
+    const auto peakMatch = peakRe.match(line);
+    const auto peakfMatch = peakfRe.match(line);
+    const auto peakErrMatch = peakErrRe.match(line);
+    const auto covMatch = covRe.match(line);
+    if (!peakMatch.hasMatch() || !peakfMatch.hasMatch() || !peakErrMatch.hasMatch() || !covMatch.hasMatch())
+        return;
+
+    const auto samplesMatch = samplesRe.match(line);
+    const auto ppMatch = ppRe.match(line);
+    const auto rmsMatch = rmsRe.match(line);
+    const auto startMatch = startRe.match(line);
+
+    m_firmwareMtPhaseResult.valid = true;
+    m_firmwareMtPhaseResult.done = true;
+    m_firmwareMtPhaseResult.peakBin = peakMatch.captured(1).toInt();
+    m_firmwareMtPhaseResult.peakBinFloat = peakfMatch.captured(1).toDouble();
+    m_firmwareMtPhaseResult.peakErrBins = peakErrMatch.captured(1).toInt();
+    m_firmwareMtPhaseResult.coverageBins = covMatch.captured(1).toUInt();
+    m_firmwareMtPhaseResult.samples = samplesMatch.hasMatch() ? samplesMatch.captured(1).toUInt() : 0;
+    m_firmwareMtPhaseResult.peakToPeakArcsec = ppMatch.hasMatch() ? ppMatch.captured(1).toDouble() : 0.0;
+    m_firmwareMtPhaseResult.residualRmsArcsec = rmsMatch.hasMatch() ? rmsMatch.captured(1).toDouble() : 0.0;
+    m_firmwareMtPhaseResult.startIdx = startMatch.hasMatch() ? startMatch.captured(1).toInt() : 0;
+    m_mtPhaseFirmwareSummary = tr("fw top=%1(%2) err=%3 cov=%4/%5 samples=%6 pp=%7 rms=%8")
+            .arg(m_firmwareMtPhaseResult.peakBin)
+            .arg(m_firmwareMtPhaseResult.peakBinFloat, 0, 'f', 1)
+            .arg(m_firmwareMtPhaseResult.peakErrBins)
+            .arg(m_firmwareMtPhaseResult.coverageBins)
+            .arg(PecBins)
+            .arg(m_firmwareMtPhaseResult.samples)
+            .arg(m_firmwareMtPhaseResult.peakToPeakArcsec, 0, 'f', 1)
+            .arg(m_firmwareMtPhaseResult.residualRmsArcsec, 0, 'f', 1);
+
+    if (!m_mtPhaseScanActive && m_mtPhaseStatusLabel) {
+        const QString localSummary = m_mtPhaseLocalSummary.isEmpty()
+                ? tr("local pending")
+                : m_mtPhaseLocalSummary;
+        m_mtPhaseStatusLabel->setText(tr("MT phase local: %1\nFW: %2")
+                                      .arg(localSummary)
+                                      .arg(m_mtPhaseFirmwareSummary));
+    }
 }
 
 void MainWindow::requestMtMonitorSample(const EncoderSample &sample)
@@ -2632,25 +2724,31 @@ void MainWindow::finishMtPhaseScan(bool aborted)
             : 0;
 
     if (m_mtPhaseStatusLabel) {
+        const QString firmwareSummary = m_firmwareMtPhaseResult.valid
+                ? m_mtPhaseFirmwareSummary
+                : tr("fw pending");
+        m_mtPhaseLocalSummary = tr("local top=%1(%2) exp=%3 peak_err=%4 cur=%5 actual=%6 cur_diff=%7 cov=%8/%9 used=%10/%11 pp=%12 rms=%13 tpl=%14 corr=%15 restore=%16 status=%17")
+                .arg(peakBin)
+                .arg(peakBinFloat, 0, 'f', 1)
+                .arg(m_mtPhaseRefValid ? QString::number(expectedPeakBin, 'f', 1) : QStringLiteral("--"))
+                .arg(m_mtPhaseRefValid ? QString::number(peakDiffBins) : QStringLiteral("--"))
+                .arg(currentPecBin)
+                .arg(statusOk ? QString::number(actualIdx) : QStringLiteral("--"))
+                .arg(statusOk ? QString::number(currentDiffBins) : QStringLiteral("--"))
+                .arg(coverageBins)
+                .arg(PecBins)
+                .arg(qMax(0, stableLast - stableFirst))
+                .arg(m_mtPhaseScanSamples.size())
+                .arg(peakToPeakArcsec, 0, 'f', 1)
+                .arg(residualRmsArcsec, 0, 'f', 1)
+                .arg(usedTemplate ? "1" : "0")
+                .arg(templateCorrelation, 0, 'f', 3)
+                .arg((!m_mtPhaseRestorePecEnabled || restoreOk) ? "OK" : "FAIL")
+                .arg(statusOk ? "OK" : "FAIL");
         m_mtPhaseStatusLabel->setText(
-                    tr("MT phase verify top=%1(%2) exp=%3 peak_err=%4 cur=%5 actual=%6 cur_diff=%7 cov=%8/%9 used=%10/%11 pp=%12 rms=%13 tpl=%14 corr=%15 restore=%16 status=%17")
-                    .arg(peakBin)
-                    .arg(peakBinFloat, 0, 'f', 1)
-                    .arg(m_mtPhaseRefValid ? QString::number(expectedPeakBin, 'f', 1) : QStringLiteral("--"))
-                    .arg(m_mtPhaseRefValid ? QString::number(peakDiffBins) : QStringLiteral("--"))
-                    .arg(currentPecBin)
-                    .arg(statusOk ? QString::number(actualIdx) : QStringLiteral("--"))
-                    .arg(statusOk ? QString::number(currentDiffBins) : QStringLiteral("--"))
-                    .arg(coverageBins)
-                    .arg(PecBins)
-                    .arg(qMax(0, stableLast - stableFirst))
-                    .arg(m_mtPhaseScanSamples.size())
-                    .arg(peakToPeakArcsec, 0, 'f', 1)
-                    .arg(residualRmsArcsec, 0, 'f', 1)
-                    .arg(usedTemplate ? "1" : "0")
-                    .arg(templateCorrelation, 0, 'f', 3)
-                    .arg((!m_mtPhaseRestorePecEnabled || restoreOk) ? "OK" : "FAIL")
-                    .arg(statusOk ? "OK" : "FAIL"));
+                    tr("MT phase local: %1\nFW: %2")
+                    .arg(m_mtPhaseLocalSummary)
+                    .arg(firmwareSummary));
     }
 }
 
