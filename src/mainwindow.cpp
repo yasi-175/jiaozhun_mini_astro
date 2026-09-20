@@ -167,6 +167,8 @@ void MainWindow::setupUi()
     m_commandSpeedLabel = new QLabel(tr("Command speed: --"), this);
     m_actualSpeedLabel = new QLabel(tr("Actual speed: --"), this);
     m_positionErrorLabel = new QLabel(tr("Position error: --"), this);
+    m_rateSlopeLabel = new QLabel(tr("Slope: --"), this);
+    m_suggestedSpeedLabel = new QLabel(tr("Suggested: --"), this);
     m_actualIntervalLabel = new QLabel(tr("Actual: --"), this);
     m_readDurationLabel = new QLabel(tr("Read: --"), this);
     valuesRow1->addWidget(m_decLabel);
@@ -175,6 +177,8 @@ void MainWindow::setupUi()
     valuesRow1->addStretch(1);
     valuesRow2->addWidget(m_actualSpeedLabel);
     valuesRow2->addWidget(m_positionErrorLabel);
+    valuesRow2->addWidget(m_rateSlopeLabel);
+    valuesRow2->addWidget(m_suggestedSpeedLabel);
     valuesRow2->addWidget(m_actualIntervalLabel);
     valuesRow2->addWidget(m_readDurationLabel);
     valuesRow2->addStretch(1);
@@ -401,6 +405,14 @@ void MainWindow::setupMountUi(QVBoxLayout *root)
     m_mountSpeedSpinBox->setValue(0.05942);
     m_mountSpeedSpinBox->setSuffix(tr(" kHz"));
 
+    auto *refSpeedLabel = new QLabel(tr("Ref kHz:"), this);
+    m_referenceSpeedSpinBox = new QDoubleSpinBox(this);
+    m_referenceSpeedSpinBox->setRange(0.00001, 40.0);
+    m_referenceSpeedSpinBox->setDecimals(5);
+    m_referenceSpeedSpinBox->setSingleStep(0.00001);
+    m_referenceSpeedSpinBox->setValue(0.05942);
+    m_referenceSpeedSpinBox->setSuffix(tr(" kHz"));
+
     m_decPositiveButton = new QPushButton(tr("DEC +"), this);
     m_decNegativeButton = new QPushButton(tr("DEC -"), this);
     m_decStopButton = new QPushButton(tr("DEC Stop"), this);
@@ -420,6 +432,8 @@ void MainWindow::setupMountUi(QVBoxLayout *root)
     mountToolbar->addWidget(m_mountDisconnectButton);
     mountToolbar->addWidget(speedLabel);
     mountToolbar->addWidget(m_mountSpeedSpinBox);
+    mountToolbar->addWidget(refSpeedLabel);
+    mountToolbar->addWidget(m_referenceSpeedSpinBox);
     mountToolbar->addWidget(m_decNegativeButton);
     mountToolbar->addWidget(m_decStopButton);
     mountToolbar->addWidget(m_decPositiveButton);
@@ -457,6 +471,8 @@ void MainWindow::setupGuideUi(QVBoxLayout *root)
     guideToolbar->setSpacing(8);
     auto *pecToolbar = new QHBoxLayout();
     pecToolbar->setSpacing(8);
+    auto *mtPhaseToolbar = new QHBoxLayout();
+    mtPhaseToolbar->setSpacing(8);
     auto *mtCalToolbar = new QHBoxLayout();
     mtCalToolbar->setSpacing(8);
     auto *backlashToolbar = new QHBoxLayout();
@@ -523,6 +539,8 @@ void MainWindow::setupGuideUi(QVBoxLayout *root)
     m_mtPhaseScanButton = new QPushButton(tr("MT相位扫描"), this);
     m_mtPhaseStopButton = new QPushButton(tr("MT相位停止"), this);
     m_mtPhaseStopButton->setEnabled(false);
+    m_mtPhaseApplyButton = new QPushButton(tr("应用MT相位"), this);
+    m_mtPhaseApplyButton->setEnabled(false);
     m_mtPhaseStatusLabel = new QLabel(tr("MT phase idle"), this);
     m_mtPhaseStatusLabel->setMinimumWidth(420);
     m_mtPhaseStatusLabel->setWordWrap(true);
@@ -596,13 +614,17 @@ void MainWindow::setupGuideUi(QVBoxLayout *root)
     pecToolbar->addWidget(m_pecDisableButton);
     pecToolbar->addWidget(m_pecStatusButton);
     pecToolbar->addWidget(m_gotoPhaseTestButton);
-    pecToolbar->addWidget(new QLabel(tr("Peak bin:"), this));
-    pecToolbar->addWidget(m_mtPhasePeakBinSpinBox);
-    pecToolbar->addWidget(m_mtPhaseScanButton);
-    pecToolbar->addWidget(m_mtPhaseStopButton);
     pecToolbar->addWidget(m_pecStatusLabel, 1);
-    pecToolbar->addWidget(m_mtPhaseStatusLabel);
     root->addLayout(pecToolbar);
+
+    mtPhaseToolbar->addWidget(new QLabel(tr("MT phase:"), this));
+    mtPhaseToolbar->addWidget(new QLabel(tr("Peak bin:"), this));
+    mtPhaseToolbar->addWidget(m_mtPhasePeakBinSpinBox);
+    mtPhaseToolbar->addWidget(m_mtPhaseScanButton);
+    mtPhaseToolbar->addWidget(m_mtPhaseStopButton);
+    mtPhaseToolbar->addWidget(m_mtPhaseApplyButton);
+    mtPhaseToolbar->addWidget(m_mtPhaseStatusLabel, 1);
+    root->addLayout(mtPhaseToolbar);
 
     mtCalToolbar->addWidget(new QLabel(tr("MT cal speed:"), this));
     mtCalToolbar->addWidget(m_mtCalSpeedSpinBox);
@@ -630,6 +652,7 @@ void MainWindow::setupGuideUi(QVBoxLayout *root)
 
     m_guideExposureTimer = new QTimer(this);
     m_guideExposureTimer->setTimerType(Qt::PreciseTimer);
+    m_guideExposureTimer->setSingleShot(true);
     connect(m_guideExposureTimer, &QTimer::timeout, this, &MainWindow::runGuideExposure);
 
     m_guidePulseTimer = new QTimer(this);
@@ -660,6 +683,7 @@ void MainWindow::setupGuideUi(QVBoxLayout *root)
     connect(m_gotoPhaseTestButton, &QPushButton::clicked, this, &MainWindow::startGotoPhaseTest);
     connect(m_mtPhaseScanButton, &QPushButton::clicked, this, &MainWindow::startMtPhaseScan);
     connect(m_mtPhaseStopButton, &QPushButton::clicked, this, &MainWindow::stopMtPhaseScan);
+    connect(m_mtPhaseApplyButton, &QPushButton::clicked, this, &MainWindow::applyFirmwareMtPhaseScan);
     connect(m_mtCalStartButton, &QPushButton::clicked, this, &MainWindow::startMtCalibration);
     connect(m_mtCalStopButton, &QPushButton::clicked, this, &MainWindow::stopMtCalibration);
     connect(m_mtCalUploadButton, &QPushButton::clicked, this, &MainWindow::uploadMtCalibration);
@@ -850,6 +874,7 @@ void MainWindow::handleMountResponse(const QString &line)
 
     handleCalStatusResponse(line);
     handleFirmwareMtPhaseResponse(line);
+    handleFirmwareMtPhaseApplyResponse(line);
     handleMtRawResponse(line);
     handleMtMonitorRawResponse(line);
 }
@@ -911,15 +936,13 @@ void MainWindow::disconnectMount()
 void MainWindow::slewDecPositive()
 {
     stopGuideSimulation();
-    const double speedKHz = selectedMountSpeedKHz();
-    sendGuideSpeed(speedKHz, speedKHz);
+    sendGuideSpeed(selectedMountSpeedKHz(), selectedReferenceSpeedKHz());
 }
 
 void MainWindow::slewDecNegative()
 {
     stopGuideSimulation();
-    const double speedKHz = -selectedMountSpeedKHz();
-    sendGuideSpeed(speedKHz, speedKHz);
+    sendGuideSpeed(-selectedMountSpeedKHz(), -selectedReferenceSpeedKHz());
 }
 
 void MainWindow::stopDec()
@@ -932,6 +955,11 @@ void MainWindow::stopDec()
 double MainWindow::selectedMountSpeedKHz() const
 {
     return m_mountSpeedSpinBox ? m_mountSpeedSpinBox->value() : 1.0;
+}
+
+double MainWindow::selectedReferenceSpeedKHz() const
+{
+    return m_referenceSpeedSpinBox ? m_referenceSpeedSpinBox->value() : selectedMountSpeedKHz();
 }
 
 void MainWindow::setDecSpeedState(double commandSpeedKHz, double referenceSpeedKHz)
@@ -979,10 +1007,13 @@ void MainWindow::startGuideSimulation()
     resetGuideRms();
     m_guideActive = true;
     m_guidePulseActive = false;
-    m_guideExposureTimer->start(m_guideExposureMsSpinBox->value());
+    m_guideExposurePending = false;
+    scheduleGuideExposure();
     m_guideStartButton->setEnabled(false);
     m_guideStopButton->setEnabled(true);
-    updateGuideStatus(tr("Guide running at base %1 kHz").arg(baseSpeedKHz, 0, 'f', 5));
+    updateGuideStatus(tr("Guide exposing %1 ms at base %2 kHz")
+                      .arg(m_guideExposureMsSpinBox->value())
+                      .arg(baseSpeedKHz, 0, 'f', 5));
 }
 
 void MainWindow::stopGuideSimulation()
@@ -992,6 +1023,7 @@ void MainWindow::stopGuideSimulation()
 
     m_guideActive = false;
     m_guidePulseActive = false;
+    m_guideExposurePending = false;
     if (m_guideExposureTimer)
         m_guideExposureTimer->stop();
     if (m_guidePulseTimer)
@@ -1009,8 +1041,23 @@ void MainWindow::stopGuideSimulation()
     updateGuideStatus(tr("Guide stopped"));
 }
 
+void MainWindow::scheduleGuideExposure()
+{
+    if (!m_guideActive || m_guidePulseActive || !m_mountController->isConnected()) {
+        m_guideExposurePending = false;
+        return;
+    }
+
+    const int exposureMs = m_guideExposureMsSpinBox ? m_guideExposureMsSpinBox->value() : 1000;
+    m_guideExposurePending = true;
+    m_guideExposureTimer->start(exposureMs);
+    updateGuideStatus(tr("Exposing %1 ms").arg(exposureMs));
+}
+
 void MainWindow::runGuideExposure()
 {
+    m_guideExposurePending = false;
+
     if (!m_guideActive || m_guidePulseActive || !m_mountController->isConnected())
         return;
 
@@ -1018,8 +1065,10 @@ void MainWindow::runGuideExposure()
         appendGuideErrorSample(m_elapsed.elapsed(), m_signedPositionErrorArcsec);
 
     const double correctionRateArcsecPerSecond = guideCorrectionArcsecPerSecond();
-    if (correctionRateArcsecPerSecond <= 0.0)
+    if (correctionRateArcsecPerSecond <= 0.0) {
+        scheduleGuideExposure();
         return;
+    }
 
     const double errorArcsec = m_signedPositionErrorArcsec;
     const double aggr = static_cast<double>(m_guideAggressivenessSpinBox->value()) / 100.0;
@@ -1028,6 +1077,7 @@ void MainWindow::runGuideExposure()
 
     if (pulseMs < 1) {
         updateGuideStatus(tr("Guide idle, error %1 arcsec").arg(errorArcsec, 0, 'f', 3));
+        scheduleGuideExposure();
         return;
     }
 
@@ -1036,8 +1086,10 @@ void MainWindow::runGuideExposure()
     const double correctionSpeedKHz = errorArcsec >= 0.0 ? deltaSpeedKHz : -deltaSpeedKHz;
     const double pulseSpeedKHz = baseSpeedKHz + correctionSpeedKHz;
 
-    if (!sendGuideSpeed(pulseSpeedKHz, baseSpeedKHz))
+    if (!sendGuideSpeed(pulseSpeedKHz, baseSpeedKHz)) {
+        scheduleGuideExposure();
         return;
+    }
 
     m_guidePulseActive = true;
     m_guidePulseTimer->start(pulseMs);
@@ -1058,6 +1110,7 @@ void MainWindow::finishGuidePulse()
     if (sendGuideSpeed(baseSpeedKHz, baseSpeedKHz))
         updateGuideStatus(tr("Back to base %1 kHz").arg(baseSpeedKHz, 0, 'f', 5));
     m_guidePulseActive = false;
+    scheduleGuideExposure();
 }
 
 void MainWindow::startHysteresisAutoTest()
@@ -1327,7 +1380,9 @@ void MainWindow::appendSample(const EncoderSample &sample)
 
     m_decLabel->setText(tr("DEC: %1").arg(sample.dec));
     m_decDegreeLabel->setText(tr("DEC deg: %1").arg(sample.decDegree, 0, 'f', 6));
-    m_commandSpeedLabel->setText(tr("Command speed: %1 Hz").arg(m_commandedDecSpeedHz, 0, 'f', 2));
+    m_commandSpeedLabel->setText(tr("Command: %1 Hz  Ref: %2 Hz")
+                                 .arg(m_commandedDecSpeedHz, 0, 'f', 2)
+                                 .arg(m_referenceDecSpeedHz, 0, 'f', 2));
     m_actualSpeedLabel->setText(tr("Actual speed: %1 Hz").arg(actualSpeedHz, 0, 'f', 2));
     m_positionErrorLabel->setText(tr("Position error: %1 arcsec").arg(errorArcsec, 0, 'f', 3));
     m_actualIntervalLabel->setText(tr("Actual: %1 ms").arg(sample.actualIntervalMs));
@@ -1351,12 +1406,60 @@ void MainWindow::appendSample(const EncoderSample &sample)
         setChartXRange(0.0, m_visibleSeconds);
     }
 
+    updateRateDriftStats(minVisibleSeconds);
+
     if (m_lastChartAxisUpdateMs < 0 || sample.elapsedMs - m_lastChartAxisUpdateMs >= ChartAxisUpdateIntervalMs) {
         updateYAxisForVisibleRange(m_commandSpeedSeries, m_commandSpeedAxisY, minVisibleSeconds, 1.0);
         updateErrorYAxisForVisibleRange(minVisibleSeconds);
         updateMtCompareYAxis(minVisibleSeconds);
         m_lastChartAxisUpdateMs = sample.elapsedMs;
     }
+}
+
+void MainWindow::updateRateDriftStats(double minVisibleSeconds)
+{
+    if (!m_rateSlopeLabel || !m_suggestedSpeedLabel || !m_positionErrorSeries)
+        return;
+
+    const auto points = m_positionErrorSeries->pointsVector();
+    const int minSamples = 30;
+    const double minSpanSeconds = 60.0;
+    int n = 0;
+    double sumX = 0.0;
+    double sumY = 0.0;
+    double sumXX = 0.0;
+    double sumXY = 0.0;
+    double firstX = 0.0;
+    double lastX = 0.0;
+
+    for (const QPointF &point : points) {
+        if (point.x() < minVisibleSeconds)
+            continue;
+        if (n == 0)
+            firstX = point.x();
+        lastX = point.x();
+        ++n;
+        sumX += point.x();
+        sumY += point.y();
+        sumXX += point.x() * point.x();
+        sumXY += point.x() * point.y();
+    }
+
+    const double spanSeconds = lastX - firstX;
+    const double denominator = n * sumXX - sumX * sumX;
+    if (n < minSamples || spanSeconds < minSpanSeconds || qAbs(denominator) < 1e-9
+            || qAbs(m_commandedDecSpeedHz) < 1e-9) {
+        m_rateSlopeLabel->setText(tr("Slope: --"));
+        m_suggestedSpeedLabel->setText(tr("Suggested: --"));
+        return;
+    }
+
+    const double slopeArcsecPerSecond = (n * sumXY - sumX * sumY) / denominator;
+    const double arcsecPerPulse = ArcsecPerRev / PulsesPerOutputRev;
+    const double suggestedSpeedHz = m_commandedDecSpeedHz + slopeArcsecPerSecond / arcsecPerPulse;
+
+    m_rateSlopeLabel->setText(tr("Slope: %1\"/s").arg(slopeArcsecPerSecond, 0, 'f', 4));
+    m_suggestedSpeedLabel->setText(tr("Suggested: %1 kHz").arg(suggestedSpeedHz / 1000.0, 0, 'f', 5));
 }
 
 void MainWindow::updateYAxisForVisibleRange(QLineSeries *series, QValueAxis *axis, double minVisibleSeconds, double minPadding)
@@ -1614,6 +1717,10 @@ void MainWindow::resetChart()
         m_actualSpeedLabel->setText(tr("Actual speed: --"));
     if (m_positionErrorLabel)
         m_positionErrorLabel->setText(tr("Position error: --"));
+    if (m_rateSlopeLabel)
+        m_rateSlopeLabel->setText(tr("Slope: --"));
+    if (m_suggestedSpeedLabel)
+        m_suggestedSpeedLabel->setText(tr("Suggested: --"));
     if (m_mtCompareStatsLabel)
         m_mtCompareStatsLabel->setText(tr("MT compare: --"));
     resetGuideRms();
@@ -1931,6 +2038,8 @@ void MainWindow::startMtPhaseScan()
         m_mtPhaseScanButton->setEnabled(false);
     if (m_mtPhaseStopButton)
         m_mtPhaseStopButton->setEnabled(true);
+    if (m_mtPhaseApplyButton)
+        m_mtPhaseApplyButton->setEnabled(false);
 
     m_mountController->sendCommand(QStringLiteral("PEC:MTSCAN,STOP"));
     m_mountController->sendCommand(QStringLiteral("PEC:DISABLE"));
@@ -1959,6 +2068,33 @@ void MainWindow::startMtPhaseScan()
 void MainWindow::stopMtPhaseScan()
 {
     finishMtPhaseScan(true);
+}
+
+void MainWindow::applyFirmwareMtPhaseScan()
+{
+    if (!m_mountController->isConnected()) {
+        updateMountStatus(tr("Mount is not connected"));
+        return;
+    }
+    if (m_mtPhaseScanActive) {
+        updateMountStatus(tr("Stop MT phase scan before applying"));
+        return;
+    }
+    if (!m_firmwareMtPhaseResult.valid) {
+        updateMountStatus(tr("No firmware MT phase result to apply"));
+        return;
+    }
+
+    if (m_mtPhaseApplyButton)
+        m_mtPhaseApplyButton->setEnabled(false);
+
+    if (m_mountController->sendCommand(QStringLiteral("PEC:MTSCAN,APPLY"))) {
+        updateMountStatus(tr("Applying firmware MT phase result"));
+    } else {
+        if (m_mtPhaseApplyButton)
+            m_mtPhaseApplyButton->setEnabled(true);
+        updateMountStatus(tr("Failed to send MT phase apply command"));
+    }
 }
 
 void MainWindow::startMtCalibration()
@@ -2460,7 +2596,26 @@ void MainWindow::handleCalStatusResponse(const QString &line)
 
 void MainWindow::handleFirmwareMtPhaseResponse(const QString &line)
 {
-    if (!line.startsWith(QStringLiteral("PEC:MTSCAN,DONE")))
+    if (line.startsWith(QStringLiteral("PEC:MTSCAN,DONE_FAIL"))) {
+        m_firmwareMtPhaseResult = FirmwareMtPhaseResult{};
+        m_mtPhaseFirmwareSummary = QStringLiteral("fw fail: ") + line;
+        if (m_mtPhaseApplyButton)
+            m_mtPhaseApplyButton->setEnabled(false);
+        if (!m_mtPhaseScanActive && m_mtPhaseStatusLabel) {
+            const QString localSummary = m_mtPhaseLocalSummary.isEmpty()
+                    ? tr("local pending")
+                    : m_mtPhaseLocalSummary;
+            m_mtPhaseStatusLabel->setText(tr("MT phase local: %1\nFW: %2")
+                                          .arg(localSummary)
+                                          .arg(m_mtPhaseFirmwareSummary));
+        }
+        return;
+    }
+
+    const bool isDoneLine = line.startsWith(QStringLiteral("PEC:MTSCAN,DONE"));
+    const bool isDoneStatusLine = line.startsWith(QStringLiteral("PEC:MTSCAN,STATUS")) &&
+            line.contains(QStringLiteral("done=1"));
+    if (!isDoneLine && !isDoneStatusLine)
         return;
 
     static const QRegularExpression peakRe(QStringLiteral("peak=(-?\\d+)"));
@@ -2494,6 +2649,8 @@ void MainWindow::handleFirmwareMtPhaseResponse(const QString &line)
     m_firmwareMtPhaseResult.peakToPeakArcsec = ppMatch.hasMatch() ? ppMatch.captured(1).toDouble() : 0.0;
     m_firmwareMtPhaseResult.residualRmsArcsec = rmsMatch.hasMatch() ? rmsMatch.captured(1).toDouble() : 0.0;
     m_firmwareMtPhaseResult.startIdx = startMatch.hasMatch() ? startMatch.captured(1).toInt() : 0;
+    if (m_mtPhaseApplyButton && !m_mtPhaseScanActive)
+        m_mtPhaseApplyButton->setEnabled(true);
     m_mtPhaseFirmwareSummary = tr("fw top=%1(%2) err=%3 cov=%4/%5 samples=%6 pp=%7 rms=%8")
             .arg(m_firmwareMtPhaseResult.peakBin)
             .arg(m_firmwareMtPhaseResult.peakBinFloat, 0, 'f', 1)
@@ -2512,6 +2669,39 @@ void MainWindow::handleFirmwareMtPhaseResponse(const QString &line)
                                       .arg(localSummary)
                                       .arg(m_mtPhaseFirmwareSummary));
     }
+}
+
+void MainWindow::handleFirmwareMtPhaseApplyResponse(const QString &line)
+{
+    if (!line.startsWith(QStringLiteral("PEC:MTSCAN,APPLY")))
+        return;
+
+    if (line.startsWith(QStringLiteral("PEC:MTSCAN,APPLY,OK"))) {
+        static const QRegularExpression oldRe(QStringLiteral("old_idx=(\\d+)"));
+        static const QRegularExpression errRe(QStringLiteral("peak_err=(-?\\d+)"));
+        static const QRegularExpression newRe(QStringLiteral("new_idx=(\\d+)"));
+        const auto oldMatch = oldRe.match(line);
+        const auto errMatch = errRe.match(line);
+        const auto newMatch = newRe.match(line);
+        const QString summary = (oldMatch.hasMatch() && errMatch.hasMatch() && newMatch.hasMatch())
+                ? tr("FW MT phase applied: %1 - (%2) = %3")
+                    .arg(oldMatch.captured(1))
+                    .arg(errMatch.captured(1))
+                    .arg(newMatch.captured(1))
+                : tr("FW MT phase applied");
+        m_firmwareMtPhaseResult.valid = false;
+        if (m_mtPhaseApplyButton)
+            m_mtPhaseApplyButton->setEnabled(false);
+        updateMountStatus(summary);
+        if (m_mtPhaseStatusLabel)
+            m_mtPhaseStatusLabel->setText(summary + QStringLiteral("\n") + m_mtPhaseStatusLabel->text());
+        m_mountController->sendCommand(QStringLiteral("PEC:STATUS"));
+        return;
+    }
+
+    if (m_mtPhaseApplyButton && m_firmwareMtPhaseResult.valid)
+        m_mtPhaseApplyButton->setEnabled(true);
+    updateMountStatus(tr("FW MT phase apply failed: %1").arg(line));
 }
 
 void MainWindow::requestMtMonitorSample(const EncoderSample &sample)
@@ -2642,6 +2832,17 @@ void MainWindow::finishMtPhaseScan(bool aborted)
         return;
 
     m_mtPhaseScanActive = false;
+    if (!aborted && m_mountController->isConnected()) {
+        m_mountController->sendCommand(QStringLiteral("PEC:MTSCAN,STATUS"));
+        QTimer::singleShot(500, this, [this]() {
+            if (m_mountController->isConnected() && !m_firmwareMtPhaseResult.valid)
+                m_mountController->sendCommand(QStringLiteral("PEC:MTSCAN,STATUS"));
+        });
+        QTimer::singleShot(1500, this, [this]() {
+            if (m_mountController->isConnected() && !m_firmwareMtPhaseResult.valid)
+                m_mountController->sendCommand(QStringLiteral("PEC:MTSCAN,STATUS"));
+        });
+    }
     if (m_mountController->isConnected())
         m_mountController->stopDec();
     setDecSpeedState(0.0, 0.0);
@@ -2650,8 +2851,12 @@ void MainWindow::finishMtPhaseScan(bool aborted)
         m_mtPhaseScanButton->setEnabled(true);
     if (m_mtPhaseStopButton)
         m_mtPhaseStopButton->setEnabled(false);
+    if (m_mtPhaseApplyButton)
+        m_mtPhaseApplyButton->setEnabled(!aborted && m_firmwareMtPhaseResult.valid);
 
     if (aborted) {
+        if (m_mtPhaseApplyButton)
+            m_mtPhaseApplyButton->setEnabled(false);
         if (m_mtPhaseRestorePecEnabled && m_mountController->isConnected()) {
             m_mountController->sendCommand(QStringLiteral("PEC:ENABLE,1"));
             m_mountController->sendCommand(QStringLiteral("PEC:STATUS"));

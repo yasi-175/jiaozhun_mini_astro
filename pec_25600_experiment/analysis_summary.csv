@@ -1,0 +1,6 @@
+metric,pec_off,pec_on,reduction_percent
+whole_detrended_rms_arcsec,34.9021,23.7815,31.86
+folded_repeatable_rms_arcsec,23.6782,4.1055,82.66
+folded_repeatable_peak_to_peak_arcsec,109.7894,38.3551,65.06
+nonrepeatable_residual_rms_arcsec,13.0804,13.3938,-2.40
+mean_actual_speed_hz,59.164724,59.010842,

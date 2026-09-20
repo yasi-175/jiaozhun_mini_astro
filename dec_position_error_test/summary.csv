@@ -1,0 +1,5 @@
+cycle,start_encoder,end_encoder,samples,final_error_arcsec,file
+1,17009366,16009996,30714,83.17201037271347,/home/q/workspace/jiaozhun_mini_astro/dec_position_error_test/dec_position_error_cycle_01.csv
+2,16993657,16009994,30314,125.60943921034361,/home/q/workspace/jiaozhun_mini_astro/dec_position_error_test/dec_position_error_cycle_02.csv
+3,16994553,16009978,30341,127.3218953064621,/home/q/workspace/jiaozhun_mini_astro/dec_position_error_test/dec_position_error_cycle_03.csv
+4,16993366,16009991,30319,140.41971503596548,/home/q/workspace/jiaozhun_mini_astro/dec_position_error_test/dec_position_error_cycle_04.csv

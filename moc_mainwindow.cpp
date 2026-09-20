@@ -22,8 +22,8 @@ QT_BEGIN_MOC_NAMESPACE
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_DEPRECATED
 struct qt_meta_stringdata_MainWindow_t {
-    QByteArrayData data[43];
-    char stringdata0[718];
+    QByteArrayData data[45];
+    char stringdata0[765];
 };
 #define QT_MOC_LITERAL(idx, ofs, len) \
     Q_STATIC_BYTE_ARRAY_DATA_HEADER_INITIALIZER_WITH_OFFSET(len, \
@@ -53,28 +53,30 @@ QT_MOC_LITERAL(17, 249, 15), // "slewDecNegative"
 QT_MOC_LITERAL(18, 265, 7), // "stopDec"
 QT_MOC_LITERAL(19, 273, 20), // "startGuideSimulation"
 QT_MOC_LITERAL(20, 294, 19), // "stopGuideSimulation"
-QT_MOC_LITERAL(21, 314, 16), // "runGuideExposure"
-QT_MOC_LITERAL(22, 331, 16), // "finishGuidePulse"
-QT_MOC_LITERAL(23, 348, 16), // "startPecTraining"
-QT_MOC_LITERAL(24, 365, 15), // "stopPecTraining"
-QT_MOC_LITERAL(25, 381, 14), // "uploadPecTable"
-QT_MOC_LITERAL(26, 396, 17), // "enablePecPlayback"
-QT_MOC_LITERAL(27, 414, 18), // "disablePecPlayback"
-QT_MOC_LITERAL(28, 433, 14), // "queryPecStatus"
-QT_MOC_LITERAL(29, 448, 18), // "startGotoPhaseTest"
-QT_MOC_LITERAL(30, 467, 20), // "runGotoPhaseTestStep"
-QT_MOC_LITERAL(31, 488, 16), // "startMtPhaseScan"
-QT_MOC_LITERAL(32, 505, 15), // "stopMtPhaseScan"
-QT_MOC_LITERAL(33, 521, 18), // "startMtCalibration"
-QT_MOC_LITERAL(34, 540, 17), // "stopMtCalibration"
-QT_MOC_LITERAL(35, 558, 19), // "uploadMtCalibration"
-QT_MOC_LITERAL(36, 578, 23), // "startHysteresisAutoTest"
-QT_MOC_LITERAL(37, 602, 22), // "stopHysteresisAutoTest"
-QT_MOC_LITERAL(38, 625, 21), // "runHysteresisAutoStep"
-QT_MOC_LITERAL(39, 647, 17), // "startBacklashTest"
-QT_MOC_LITERAL(40, 665, 16), // "stopBacklashTest"
-QT_MOC_LITERAL(41, 682, 15), // "runBacklashStep"
-QT_MOC_LITERAL(42, 698, 19) // "clearHysteresisData"
+QT_MOC_LITERAL(21, 314, 21), // "scheduleGuideExposure"
+QT_MOC_LITERAL(22, 336, 16), // "runGuideExposure"
+QT_MOC_LITERAL(23, 353, 16), // "finishGuidePulse"
+QT_MOC_LITERAL(24, 370, 16), // "startPecTraining"
+QT_MOC_LITERAL(25, 387, 15), // "stopPecTraining"
+QT_MOC_LITERAL(26, 403, 14), // "uploadPecTable"
+QT_MOC_LITERAL(27, 418, 17), // "enablePecPlayback"
+QT_MOC_LITERAL(28, 436, 18), // "disablePecPlayback"
+QT_MOC_LITERAL(29, 455, 14), // "queryPecStatus"
+QT_MOC_LITERAL(30, 470, 18), // "startGotoPhaseTest"
+QT_MOC_LITERAL(31, 489, 20), // "runGotoPhaseTestStep"
+QT_MOC_LITERAL(32, 510, 16), // "startMtPhaseScan"
+QT_MOC_LITERAL(33, 527, 15), // "stopMtPhaseScan"
+QT_MOC_LITERAL(34, 543, 24), // "applyFirmwareMtPhaseScan"
+QT_MOC_LITERAL(35, 568, 18), // "startMtCalibration"
+QT_MOC_LITERAL(36, 587, 17), // "stopMtCalibration"
+QT_MOC_LITERAL(37, 605, 19), // "uploadMtCalibration"
+QT_MOC_LITERAL(38, 625, 23), // "startHysteresisAutoTest"
+QT_MOC_LITERAL(39, 649, 22), // "stopHysteresisAutoTest"
+QT_MOC_LITERAL(40, 672, 21), // "runHysteresisAutoStep"
+QT_MOC_LITERAL(41, 694, 17), // "startBacklashTest"
+QT_MOC_LITERAL(42, 712, 16), // "stopBacklashTest"
+QT_MOC_LITERAL(43, 729, 15), // "runBacklashStep"
+QT_MOC_LITERAL(44, 745, 19) // "clearHysteresisData"
 
     },
     "MainWindow\0startReading\0\0stopReading\0"
@@ -85,12 +87,13 @@ QT_MOC_LITERAL(42, 698, 19) // "clearHysteresisData"
     "line\0connectMount\0disconnectMount\0"
     "slewDecPositive\0slewDecNegative\0stopDec\0"
     "startGuideSimulation\0stopGuideSimulation\0"
-    "runGuideExposure\0finishGuidePulse\0"
-    "startPecTraining\0stopPecTraining\0"
-    "uploadPecTable\0enablePecPlayback\0"
-    "disablePecPlayback\0queryPecStatus\0"
-    "startGotoPhaseTest\0runGotoPhaseTestStep\0"
-    "startMtPhaseScan\0stopMtPhaseScan\0"
+    "scheduleGuideExposure\0runGuideExposure\0"
+    "finishGuidePulse\0startPecTraining\0"
+    "stopPecTraining\0uploadPecTable\0"
+    "enablePecPlayback\0disablePecPlayback\0"
+    "queryPecStatus\0startGotoPhaseTest\0"
+    "runGotoPhaseTestStep\0startMtPhaseScan\0"
+    "stopMtPhaseScan\0applyFirmwareMtPhaseScan\0"
     "startMtCalibration\0stopMtCalibration\0"
     "uploadMtCalibration\0startHysteresisAutoTest\0"
     "stopHysteresisAutoTest\0runHysteresisAutoStep\0"
@@ -105,7 +108,7 @@ static const uint qt_meta_data_MainWindow[] = {
        8,       // revision
        0,       // classname
        0,    0, // classinfo
-      38,   14, // methods
+      40,   14, // methods
        0,    0, // properties
        0,    0, // enums/sets
        0,    0, // constructors
@@ -113,44 +116,46 @@ static const uint qt_meta_data_MainWindow[] = {
        0,       // signalCount
 
  // slots: name, argc, parameters, tag, flags
-       1,    0,  204,    2, 0x08 /* Private */,
-       3,    0,  205,    2, 0x08 /* Private */,
-       4,    0,  206,    2, 0x08 /* Private */,
-       5,    1,  207,    2, 0x08 /* Private */,
-       7,    1,  210,    2, 0x08 /* Private */,
-       9,    0,  213,    2, 0x08 /* Private */,
-      10,    0,  214,    2, 0x08 /* Private */,
-      11,    0,  215,    2, 0x08 /* Private */,
-      12,    1,  216,    2, 0x08 /* Private */,
-      14,    0,  219,    2, 0x08 /* Private */,
-      15,    0,  220,    2, 0x08 /* Private */,
-      16,    0,  221,    2, 0x08 /* Private */,
-      17,    0,  222,    2, 0x08 /* Private */,
-      18,    0,  223,    2, 0x08 /* Private */,
-      19,    0,  224,    2, 0x08 /* Private */,
-      20,    0,  225,    2, 0x08 /* Private */,
-      21,    0,  226,    2, 0x08 /* Private */,
-      22,    0,  227,    2, 0x08 /* Private */,
-      23,    0,  228,    2, 0x08 /* Private */,
-      24,    0,  229,    2, 0x08 /* Private */,
-      25,    0,  230,    2, 0x08 /* Private */,
-      26,    0,  231,    2, 0x08 /* Private */,
-      27,    0,  232,    2, 0x08 /* Private */,
-      28,    0,  233,    2, 0x08 /* Private */,
-      29,    0,  234,    2, 0x08 /* Private */,
-      30,    0,  235,    2, 0x08 /* Private */,
-      31,    0,  236,    2, 0x08 /* Private */,
-      32,    0,  237,    2, 0x08 /* Private */,
-      33,    0,  238,    2, 0x08 /* Private */,
-      34,    0,  239,    2, 0x08 /* Private */,
-      35,    0,  240,    2, 0x08 /* Private */,
-      36,    0,  241,    2, 0x08 /* Private */,
-      37,    0,  242,    2, 0x08 /* Private */,
-      38,    0,  243,    2, 0x08 /* Private */,
-      39,    0,  244,    2, 0x08 /* Private */,
-      40,    0,  245,    2, 0x08 /* Private */,
-      41,    0,  246,    2, 0x08 /* Private */,
-      42,    0,  247,    2, 0x08 /* Private */,
+       1,    0,  214,    2, 0x08 /* Private */,
+       3,    0,  215,    2, 0x08 /* Private */,
+       4,    0,  216,    2, 0x08 /* Private */,
+       5,    1,  217,    2, 0x08 /* Private */,
+       7,    1,  220,    2, 0x08 /* Private */,
+       9,    0,  223,    2, 0x08 /* Private */,
+      10,    0,  224,    2, 0x08 /* Private */,
+      11,    0,  225,    2, 0x08 /* Private */,
+      12,    1,  226,    2, 0x08 /* Private */,
+      14,    0,  229,    2, 0x08 /* Private */,
+      15,    0,  230,    2, 0x08 /* Private */,
+      16,    0,  231,    2, 0x08 /* Private */,
+      17,    0,  232,    2, 0x08 /* Private */,
+      18,    0,  233,    2, 0x08 /* Private */,
+      19,    0,  234,    2, 0x08 /* Private */,
+      20,    0,  235,    2, 0x08 /* Private */,
+      21,    0,  236,    2, 0x08 /* Private */,
+      22,    0,  237,    2, 0x08 /* Private */,
+      23,    0,  238,    2, 0x08 /* Private */,
+      24,    0,  239,    2, 0x08 /* Private */,
+      25,    0,  240,    2, 0x08 /* Private */,
+      26,    0,  241,    2, 0x08 /* Private */,
+      27,    0,  242,    2, 0x08 /* Private */,
+      28,    0,  243,    2, 0x08 /* Private */,
+      29,    0,  244,    2, 0x08 /* Private */,
+      30,    0,  245,    2, 0x08 /* Private */,
+      31,    0,  246,    2, 0x08 /* Private */,
+      32,    0,  247,    2, 0x08 /* Private */,
+      33,    0,  248,    2, 0x08 /* Private */,
+      34,    0,  249,    2, 0x08 /* Private */,
+      35,    0,  250,    2, 0x08 /* Private */,
+      36,    0,  251,    2, 0x08 /* Private */,
+      37,    0,  252,    2, 0x08 /* Private */,
+      38,    0,  253,    2, 0x08 /* Private */,
+      39,    0,  254,    2, 0x08 /* Private */,
+      40,    0,  255,    2, 0x08 /* Private */,
+      41,    0,  256,    2, 0x08 /* Private */,
+      42,    0,  257,    2, 0x08 /* Private */,
+      43,    0,  258,    2, 0x08 /* Private */,
+      44,    0,  259,    2, 0x08 /* Private */,
 
  // slots: parameters
     QMetaType::Void,
@@ -162,6 +167,8 @@ static const uint qt_meta_data_MainWindow[] = {
     QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void, QMetaType::QString,   13,
+    QMetaType::Void,
+    QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void,
@@ -217,28 +224,30 @@ void MainWindow::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, 
         case 13: _t->stopDec(); break;
         case 14: _t->startGuideSimulation(); break;
         case 15: _t->stopGuideSimulation(); break;
-        case 16: _t->runGuideExposure(); break;
-        case 17: _t->finishGuidePulse(); break;
-        case 18: _t->startPecTraining(); break;
-        case 19: _t->stopPecTraining(); break;
-        case 20: _t->uploadPecTable(); break;
-        case 21: _t->enablePecPlayback(); break;
-        case 22: _t->disablePecPlayback(); break;
-        case 23: _t->queryPecStatus(); break;
-        case 24: _t->startGotoPhaseTest(); break;
-        case 25: _t->runGotoPhaseTestStep(); break;
-        case 26: _t->startMtPhaseScan(); break;
-        case 27: _t->stopMtPhaseScan(); break;
-        case 28: _t->startMtCalibration(); break;
-        case 29: _t->stopMtCalibration(); break;
-        case 30: _t->uploadMtCalibration(); break;
-        case 31: _t->startHysteresisAutoTest(); break;
-        case 32: _t->stopHysteresisAutoTest(); break;
-        case 33: _t->runHysteresisAutoStep(); break;
-        case 34: _t->startBacklashTest(); break;
-        case 35: _t->stopBacklashTest(); break;
-        case 36: _t->runBacklashStep(); break;
-        case 37: _t->clearHysteresisData(); break;
+        case 16: _t->scheduleGuideExposure(); break;
+        case 17: _t->runGuideExposure(); break;
+        case 18: _t->finishGuidePulse(); break;
+        case 19: _t->startPecTraining(); break;
+        case 20: _t->stopPecTraining(); break;
+        case 21: _t->uploadPecTable(); break;
+        case 22: _t->enablePecPlayback(); break;
+        case 23: _t->disablePecPlayback(); break;
+        case 24: _t->queryPecStatus(); break;
+        case 25: _t->startGotoPhaseTest(); break;
+        case 26: _t->runGotoPhaseTestStep(); break;
+        case 27: _t->startMtPhaseScan(); break;
+        case 28: _t->stopMtPhaseScan(); break;
+        case 29: _t->applyFirmwareMtPhaseScan(); break;
+        case 30: _t->startMtCalibration(); break;
+        case 31: _t->stopMtCalibration(); break;
+        case 32: _t->uploadMtCalibration(); break;
+        case 33: _t->startHysteresisAutoTest(); break;
+        case 34: _t->stopHysteresisAutoTest(); break;
+        case 35: _t->runHysteresisAutoStep(); break;
+        case 36: _t->startBacklashTest(); break;
+        case 37: _t->stopBacklashTest(); break;
+        case 38: _t->runBacklashStep(); break;
+        case 39: _t->clearHysteresisData(); break;
         default: ;
         }
     }
@@ -273,13 +282,13 @@ int MainWindow::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 38)
+        if (_id < 40)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 38;
+        _id -= 40;
     } else if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 38)
+        if (_id < 40)
             *reinterpret_cast<int*>(_a[0]) = -1;
-        _id -= 38;
+        _id -= 40;
     }
     return _id;
 }

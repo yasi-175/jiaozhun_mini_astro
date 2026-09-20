@@ -53,6 +53,7 @@ private slots:
     void stopDec();
     void startGuideSimulation();
     void stopGuideSimulation();
+    void scheduleGuideExposure();
     void runGuideExposure();
     void finishGuidePulse();
     void startPecTraining();
@@ -65,6 +66,7 @@ private slots:
     void runGotoPhaseTestStep();
     void startMtPhaseScan();
     void stopMtPhaseScan();
+    void applyFirmwareMtPhaseScan();
     void startMtCalibration();
     void stopMtCalibration();
     void uploadMtCalibration();
@@ -101,8 +103,10 @@ private:
     void updateErrorYAxisForVisibleRange(double minVisibleSeconds);
     void resetChart();
     double selectedMountSpeedKHz() const;
+    double selectedReferenceSpeedKHz() const;
     void setDecSpeedState(double commandSpeedKHz, double referenceSpeedKHz);
     bool sendGuideSpeed(double commandSpeedKHz, double referenceSpeedKHz);
+    void updateRateDriftStats(double minVisibleSeconds);
     double guideCorrectionArcsecPerSecond() const;
     void appendGuideErrorSample(qint64 elapsedMs, double errorArcsec);
     double currentGuideRmsArcsec() const;
@@ -116,6 +120,7 @@ private:
     void handleMtMonitorRawResponse(const QString &line);
     void handleCalStatusResponse(const QString &line);
     void handleFirmwareMtPhaseResponse(const QString &line);
+    void handleFirmwareMtPhaseApplyResponse(const QString &line);
     void requestMtMonitorSample(const EncoderSample &sample);
     void appendMtMonitorSample(uint32_t tama25, uint32_t raw21, qint64 elapsedMs);
     void finishMtPhaseScan(bool aborted);
@@ -172,6 +177,8 @@ private:
     QLabel *m_commandSpeedLabel = nullptr;
     QLabel *m_actualSpeedLabel = nullptr;
     QLabel *m_positionErrorLabel = nullptr;
+    QLabel *m_rateSlopeLabel = nullptr;
+    QLabel *m_suggestedSpeedLabel = nullptr;
     QLabel *m_actualIntervalLabel = nullptr;
     QLabel *m_readDurationLabel = nullptr;
     QPushButton *m_startButton = nullptr;
@@ -194,6 +201,7 @@ private:
     QComboBox *m_mountPortComboBox = nullptr;
     QSpinBox *m_mountBaudSpinBox = nullptr;
     QDoubleSpinBox *m_mountSpeedSpinBox = nullptr;
+    QDoubleSpinBox *m_referenceSpeedSpinBox = nullptr;
     QPushButton *m_refreshPortsButton = nullptr;
     QPushButton *m_mountConnectButton = nullptr;
     QPushButton *m_mountDisconnectButton = nullptr;
@@ -222,6 +230,7 @@ private:
     QSpinBox *m_mtPhasePeakBinSpinBox = nullptr;
     QPushButton *m_mtPhaseScanButton = nullptr;
     QPushButton *m_mtPhaseStopButton = nullptr;
+    QPushButton *m_mtPhaseApplyButton = nullptr;
     QLabel *m_mtPhaseStatusLabel = nullptr;
     QLabel *m_pecStatusLabel = nullptr;
     QDoubleSpinBox *m_mtCalSpeedSpinBox = nullptr;
@@ -247,6 +256,7 @@ private:
     QTimer *m_gotoPhaseTestTimer = nullptr;
     bool m_guideActive = false;
     bool m_guidePulseActive = false;
+    bool m_guideExposurePending = false;
     bool m_backlashActive = false;
 
     QChart *m_commandSpeedChart = nullptr;
