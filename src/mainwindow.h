@@ -104,6 +104,7 @@ private:
     void resetChart();
     double selectedMountSpeedKHz() const;
     double selectedReferenceSpeedKHz() const;
+    double pecDirectionSign() const;
     void setDecSpeedState(double commandSpeedKHz, double referenceSpeedKHz);
     bool sendGuideSpeed(double commandSpeedKHz, double referenceSpeedKHz);
     void updateRateDriftStats(double minVisibleSeconds);
@@ -122,7 +123,7 @@ private:
     void handleFirmwareMtPhaseResponse(const QString &line);
     void handleFirmwareMtPhaseApplyResponse(const QString &line);
     void requestMtMonitorSample(const EncoderSample &sample);
-    void appendMtMonitorSample(uint32_t tama25, uint32_t raw21, qint64 elapsedMs);
+    void appendMtMonitorSample(uint32_t tama25, uint32_t raw21, uint32_t corrected21, qint64 elapsedMs);
     void finishMtPhaseScan(bool aborted);
     bool mtPhaseStableSampleRange(int *firstIndex, int *lastIndex) const;
     bool matchMtPhaseTemplate(const QVector<double> &scanCurve, double *peakBinFloat,
@@ -191,6 +192,10 @@ private:
     QCheckBox *m_showCommandSpeedChartCheckBox = nullptr;
     QCheckBox *m_showPositionErrorChartCheckBox = nullptr;
     QCheckBox *m_showMtCompareChartCheckBox = nullptr;
+    QCheckBox *m_showTamaDegreeCheckBox = nullptr;
+    QCheckBox *m_showMtRawOffsetDegreeCheckBox = nullptr;
+    QCheckBox *m_showMtCompareErrorCheckBox = nullptr;
+    QCheckBox *m_showMtCorrectedErrorCheckBox = nullptr;
     QCheckBox *m_showHysteresisChartCheckBox = nullptr;
     QCheckBox *m_showTamagawaErrorCheckBox = nullptr;
     QCheckBox *m_showMtRawErrorCheckBox = nullptr;
@@ -227,6 +232,7 @@ private:
     QPushButton *m_pecStatusButton = nullptr;
     QPushButton *m_gotoPhaseTestButton = nullptr;
     QSpinBox *m_pecCyclesSpinBox = nullptr;
+    QComboBox *m_pecDirectionComboBox = nullptr;
     QSpinBox *m_mtPhasePeakBinSpinBox = nullptr;
     QPushButton *m_mtPhaseScanButton = nullptr;
     QPushButton *m_mtPhaseStopButton = nullptr;
@@ -234,6 +240,7 @@ private:
     QLabel *m_mtPhaseStatusLabel = nullptr;
     QLabel *m_pecStatusLabel = nullptr;
     QDoubleSpinBox *m_mtCalSpeedSpinBox = nullptr;
+    QComboBox *m_mtCalDirectionComboBox = nullptr;
     QPushButton *m_mtCalStartButton = nullptr;
     QPushButton *m_mtCalStopButton = nullptr;
     QPushButton *m_mtCalUploadButton = nullptr;
@@ -274,6 +281,8 @@ private:
     QScatterSeries *m_mtPhasePeakMarkerSeries = nullptr;
     QLineSeries *m_tamaDegreeSeries = nullptr;
     QLineSeries *m_mtRawOffsetDegreeSeries = nullptr;
+    QLineSeries *m_mtCompareErrorSeries = nullptr;
+    QLineSeries *m_mtCorrectedErrorSeries = nullptr;
     QLineSeries *m_hysPosToNegCorrSeries = nullptr;
     QLineSeries *m_hysNegToPosCorrSeries = nullptr;
     QLineSeries *m_hysPosToNegRawSeries = nullptr;
@@ -306,7 +315,9 @@ private:
     qint64 m_lastChartAxisUpdateMs = -1;
     QVector<QPointF> m_guideErrorSamples;
     static constexpr int PecBins = 512;
-    static constexpr int PecPeriodSteps = 25600;
+    // Harmonic-drive PEC period: 5,120,000 output microsteps / 100 = 51,200 steps
+    // (about 14.4 min at 0.05942 kHz), matching firmware PEC_PERIOD_STEPS.
+    static constexpr int PecPeriodSteps = 51200;
     bool m_pecTraining = false;
     PecTrainState m_pecTrainState = PecTrainState::Idle;
     bool m_pecTableReady = false;
@@ -333,7 +344,8 @@ private:
     static constexpr qint64 MtMonitorMinIntervalMs = 500;
     static constexpr qint64 MtStatsUpdateIntervalMs = 1000;
     static constexpr qint64 ChartAxisUpdateIntervalMs = 500;
-    static constexpr qint64 MtPhaseScanDurationMs = 5 * 60 * 1000;
+    // 3 PEC periods at 0.300 kHz = 51200 / 0.300 * 3 = 512000 ms.
+    static constexpr qint64 MtPhaseScanDurationMs = 9 * 60 * 1000;
     static constexpr double MtPhaseScanSpeedKHz = 0.300;
     static constexpr int MtPhaseSmoothHalfWindowBins = 12;
     static constexpr double MtPhaseTrimFraction = 0.08;
@@ -474,11 +486,19 @@ private:
     bool m_mtCalHaveLastRawBin = false;
     int m_mtCalLastRawBin = 0;
     bool m_mtCalStopArmed = false;
+    int m_mtCalPreviousIntervalMs = 0;
+    bool m_mtCalIntervalOverridden = false;
     QVector<uint32_t> m_mtCalRaw21;
     QVector<uint32_t> m_mtCalTama25;
     QVector<int> m_mtCalLut;
+    QVector<int> m_mtCalLutByDirection[2];
+    bool m_mtCalLutReadyByDirection[2] = {false, false};
+    bool m_mtCalHaveSharedOffset = false;
+    bool m_mtCalHaveSharedDirection = false;
+    int m_mtCalActiveDirection = 0;
     double m_pecStartSeconds = 0.0;
     double m_pecTrainRefSpeedHz = 0.0;
+    int m_pecTrainDirectionSign = -1;
     int m_pecCyclesDone = 0;
     int m_pecLastPhaseStep = 0;
     int m_pecCurrentBin = 0;

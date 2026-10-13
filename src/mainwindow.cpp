@@ -3,6 +3,7 @@
 #include <QDateTime>
 #include <QCoreApplication>
 #include <QDeadlineTimer>
+#include <QDebug>
 #include <QFile>
 #include <QHBoxLayout>
 #include <QRegularExpression>
@@ -56,6 +57,217 @@ static double shortestEncoderDelta(uint32_t current, uint32_t previous)
     else if (delta < -halfScale)
         delta += EncoderFullScale;
     return delta;
+}
+
+struct PecPeakChoice {
+    bool valid = false;
+    int bin = 0;
+    double binFloat = 0.0;
+    double prominence = 0.0;
+    double leftWidth = 0.0;
+    double rightWidth = 0.0;
+    double peakToPeak = 0.0;
+};
+
+static QVector<double> smoothPecCurve(const QVector<double> &input, int halfWindow, int passes)
+{
+    if (input.isEmpty())
+        return input;
+    const int bins = input.size();
+    QVector<double> smooth = input;
+    halfWindow = qMax(1, halfWindow);
+    for (int pass = 0; pass < passes; ++pass) {
+        QVector<double> next(bins, 0.0);
+        for (int i = 0; i < bins; ++i) {
+            double acc = 0.0;
+            int n = 0;
+            for (int k = -halfWindow; k <= halfWindow; ++k) {
+                int idx = (i + k) % bins;
+                if (idx < 0)
+                    idx += bins;
+                acc += smooth[idx];
+                ++n;
+            }
+            next[i] = n > 0 ? acc / static_cast<double>(n) : smooth[i];
+        }
+        smooth = next;
+    }
+    return smooth;
+}
+
+static int circularBinDiffLocal(int a, int b, int bins)
+{
+    if (bins <= 0)
+        return 0;
+    int diff = (a - b) % bins;
+    if (diff > bins / 2)
+        diff -= bins;
+    if (diff < -bins / 2)
+        diff += bins;
+    return diff;
+}
+
+// Select the harmonic PEC training/reference peak from a folded error curve.
+// At the 14.4 min period there are two peaks per period.  The wanted peak is
+// the one with the larger base-to-tip prominence (not the larger absolute
+// error), and if the two prominences are close we prefer the more asymmetric
+// peak.  Absolute asymmetry keeps the choice independent of scan direction.
+static PecPeakChoice selectPecPeakFromSmooth(const QVector<double> &smooth, int bins)
+{
+    PecPeakChoice out;
+    if (bins < 32 || smooth.size() != bins)
+        return out;
+
+    double minValue = smooth[0];
+    double maxValue = smooth[0];
+    for (int i = 1; i < bins; ++i) {
+        minValue = qMin(minValue, smooth[i]);
+        maxValue = qMax(maxValue, smooth[i]);
+    }
+    const double peakToPeak = maxValue - minValue;
+    if (peakToPeak <= 1.0)
+        return out;
+
+    const int peakWindow = qMax(4, bins / 24);
+    const int baseWindow = qMax(8, bins / 8);
+    const int mergeWindow = qMax(8, bins / 12);
+    const double minCandidateValue = minValue + peakToPeak * 0.20;
+
+    QVector<int> raw;
+    for (int i = 0; i < bins; ++i) {
+        if (smooth[i] < minCandidateValue)
+            continue;
+        bool isLocalMax = true;
+        for (int k = -peakWindow; k <= peakWindow; ++k) {
+            int idx = (i + k) % bins;
+            if (idx < 0)
+                idx += bins;
+            if (smooth[idx] > smooth[i]) {
+                isLocalMax = false;
+                break;
+            }
+        }
+        if (isLocalMax)
+            raw.append(i);
+    }
+
+    QVector<int> merged;
+    for (int p : raw) {
+        bool mergedIntoExisting = false;
+        for (int &m : merged) {
+            if (qAbs(circularBinDiffLocal(p, m, bins)) <= mergeWindow) {
+                if (smooth[p] > smooth[m])
+                    m = p;
+                mergedIntoExisting = true;
+                break;
+            }
+        }
+        if (!mergedIntoExisting)
+            merged.append(p);
+    }
+
+    struct PeakInfo {
+        int bin = 0;
+        double value = 0.0;
+        double prominence = 0.0;
+        double leftWidth = 0.0;
+        double rightWidth = 0.0;
+        double asymmetry = 0.0;
+    };
+    QVector<PeakInfo> infos;
+    for (int p : merged) {
+        const double peakValue = smooth[p];
+        double leftMin = peakValue;
+        double rightMin = peakValue;
+        for (int k = 1; k <= baseWindow; ++k) {
+            int li = (p - k) % bins;
+            if (li < 0)
+                li += bins;
+            int ri = (p + k) % bins;
+            leftMin = qMin(leftMin, smooth[li]);
+            rightMin = qMin(rightMin, smooth[ri]);
+        }
+        const double base = qMax(leftMin, rightMin);
+        const double prominence = peakValue - base;
+        if (prominence < peakToPeak * 0.10)
+            continue;
+        const double halfValue = peakValue - prominence * 0.5;
+        int leftWidth = baseWindow;
+        int rightWidth = baseWindow;
+        for (int k = 1; k <= baseWindow; ++k) {
+            int li = (p - k) % bins;
+            if (li < 0)
+                li += bins;
+            if (smooth[li] < halfValue) {
+                leftWidth = k;
+                break;
+            }
+        }
+        for (int k = 1; k <= baseWindow; ++k) {
+            int ri = (p + k) % bins;
+            if (smooth[ri] < halfValue) {
+                rightWidth = k;
+                break;
+            }
+        }
+        PeakInfo info;
+        info.bin = p;
+        info.value = peakValue;
+        info.prominence = prominence;
+        info.leftWidth = static_cast<double>(leftWidth);
+        info.rightWidth = static_cast<double>(rightWidth);
+        info.asymmetry = info.rightWidth - info.leftWidth;
+        infos.append(info);
+    }
+    if (infos.isEmpty())
+        return out;
+
+    std::sort(infos.begin(), infos.end(), [](const PeakInfo &a, const PeakInfo &b) {
+        return a.prominence > b.prominence;
+    });
+
+    PeakInfo best = infos.first();
+    if (infos.size() >= 2 && infos.at(1).prominence >= infos.first().prominence * 0.90) {
+        const int limit = qMin(3, infos.size());
+        for (int i = 0; i < limit; ++i) {
+            const PeakInfo &candidate = infos.at(i);
+            if (candidate.prominence < infos.first().prominence * 0.90)
+                continue;
+            if (qAbs(candidate.asymmetry) > qAbs(best.asymmetry))
+                best = candidate;
+        }
+    }
+
+    const double refineThreshold = best.value - best.prominence * 0.20;
+    double weightedBinSum = 0.0;
+    double weightSum = 0.0;
+    for (int offset = -baseWindow / 2; offset <= baseWindow / 2; ++offset) {
+        int idx = (best.bin + offset) % bins;
+        if (idx < 0)
+            idx += bins;
+        const double value = smooth[idx];
+        if (value < refineThreshold)
+            continue;
+        const double weight = value - refineThreshold;
+        const double shapedWeight = weight * weight * weight;
+        weightedBinSum += static_cast<double>(best.bin + offset) * shapedWeight;
+        weightSum += shapedWeight;
+    }
+    double refined = weightSum > 0.0
+            ? weightedBinSum / weightSum
+            : static_cast<double>(best.bin);
+    refined = std::fmod(refined, static_cast<double>(bins));
+    if (refined < 0.0)
+        refined += bins;
+
+    out.valid = true;
+    out.bin = static_cast<int>(std::lround(refined)) % bins;
+    out.binFloat = refined;
+    out.prominence = best.prominence;
+    out.leftWidth = best.leftWidth;
+    out.rightWidth = best.rightWidth;
+    out.peakToPeak = peakToPeak;
+    return out;
 }
 
 MainWindow::MainWindow(const QString &libraryPath,
@@ -116,6 +328,14 @@ void MainWindow::setupUi()
     m_showPositionErrorChartCheckBox->setChecked(true);
     m_showMtCompareChartCheckBox = new QCheckBox(tr("MT chart"), this);
     m_showMtCompareChartCheckBox->setChecked(true);
+    m_showTamaDegreeCheckBox = new QCheckBox(tr("Tamagawa deg"), this);
+    m_showTamaDegreeCheckBox->setChecked(true);
+    m_showMtRawOffsetDegreeCheckBox = new QCheckBox(tr("MT raw+offset deg"), this);
+    m_showMtRawOffsetDegreeCheckBox->setChecked(true);
+    m_showMtCompareErrorCheckBox = new QCheckBox(tr("MT error"), this);
+    m_showMtCompareErrorCheckBox->setChecked(true);
+    m_showMtCorrectedErrorCheckBox = new QCheckBox(tr("MT error2 (LUT)"), this);
+    m_showMtCorrectedErrorCheckBox->setChecked(true);
     m_showHysteresisChartCheckBox = new QCheckBox(tr("Hys chart"), this);
     m_showHysteresisChartCheckBox->setChecked(false);
     m_showTamagawaErrorCheckBox = new QCheckBox(tr("Tamagawa"), this);
@@ -143,6 +363,16 @@ void MainWindow::setupUi()
     toolbar->addWidget(m_showHysteresisChartCheckBox);
     toolbar->addWidget(m_statusLabel, 1);
     root->addLayout(toolbar);
+
+    auto *mtCompareSeriesToolbar = new QHBoxLayout();
+    mtCompareSeriesToolbar->setSpacing(12);
+    mtCompareSeriesToolbar->addWidget(new QLabel(tr("MT compare lines:"), this));
+    mtCompareSeriesToolbar->addWidget(m_showTamaDegreeCheckBox);
+    mtCompareSeriesToolbar->addWidget(m_showMtRawOffsetDegreeCheckBox);
+    mtCompareSeriesToolbar->addWidget(m_showMtCompareErrorCheckBox);
+    mtCompareSeriesToolbar->addWidget(m_showMtCorrectedErrorCheckBox);
+    mtCompareSeriesToolbar->addStretch(1);
+    root->addLayout(mtCompareSeriesToolbar);
 
     auto *errorSeriesToolbar = new QHBoxLayout();
     errorSeriesToolbar->setSpacing(12);
@@ -207,6 +437,16 @@ void MainWindow::setupUi()
     m_tamaDegreeSeries->setName(tr("Tamagawa deg"));
     m_mtRawOffsetDegreeSeries = new QLineSeries(this);
     m_mtRawOffsetDegreeSeries->setName(tr("MT raw+offset deg"));
+    m_mtCompareErrorSeries = new QLineSeries(this);
+    m_mtCompareErrorSeries->setName(tr("Error: Tamagawa - MT raw+offset deg"));
+    QPen mtCompareErrorPen(Qt::darkGreen);
+    mtCompareErrorPen.setWidth(2);
+    m_mtCompareErrorSeries->setPen(mtCompareErrorPen);
+    m_mtCorrectedErrorSeries = new QLineSeries(this);
+    m_mtCorrectedErrorSeries->setName(tr("Error2: Tamagawa - MT LUT+offset deg"));
+    QPen mtCorrectedErrorPen(Qt::darkCyan);
+    mtCorrectedErrorPen.setWidth(2);
+    m_mtCorrectedErrorSeries->setPen(mtCorrectedErrorPen);
     m_hysPosToNegCorrSeries = new QLineSeries(this);
     m_hysPosToNegCorrSeries->setName(tr("+->- avg dCorr"));
     m_hysNegToPosCorrSeries = new QLineSeries(this);
@@ -275,6 +515,8 @@ void MainWindow::setupUi()
     m_mtCompareChart->legend()->setVisible(true);
     m_mtCompareChart->addSeries(m_tamaDegreeSeries);
     m_mtCompareChart->addSeries(m_mtRawOffsetDegreeSeries);
+    m_mtCompareChart->addSeries(m_mtCompareErrorSeries);
+    m_mtCompareChart->addSeries(m_mtCorrectedErrorSeries);
     m_mtCompareChart->setTitle(tr("MT6835 Calibration Compare"));
 
     m_mtCompareAxisX = new QValueAxis(this);
@@ -293,6 +535,10 @@ void MainWindow::setupUi()
     m_tamaDegreeSeries->attachAxis(m_mtCompareAxisY);
     m_mtRawOffsetDegreeSeries->attachAxis(m_mtCompareAxisX);
     m_mtRawOffsetDegreeSeries->attachAxis(m_mtCompareAxisY);
+    m_mtCompareErrorSeries->attachAxis(m_mtCompareAxisX);
+    m_mtCompareErrorSeries->attachAxis(m_mtCompareAxisY);
+    m_mtCorrectedErrorSeries->attachAxis(m_mtCompareAxisX);
+    m_mtCorrectedErrorSeries->attachAxis(m_mtCompareAxisY);
 
     m_hysteresisChart = new QChart();
     m_hysteresisChart->legend()->setVisible(true);
@@ -361,6 +607,10 @@ void MainWindow::setupUi()
     connect(m_showCommandSpeedChartCheckBox, &QCheckBox::toggled, this, &MainWindow::updateChartVisibility);
     connect(m_showPositionErrorChartCheckBox, &QCheckBox::toggled, this, &MainWindow::updateChartVisibility);
     connect(m_showMtCompareChartCheckBox, &QCheckBox::toggled, this, &MainWindow::updateChartVisibility);
+    connect(m_showMtCompareErrorCheckBox, &QCheckBox::toggled, this, &MainWindow::updateErrorSeriesVisibility);
+    connect(m_showTamaDegreeCheckBox, &QCheckBox::toggled, this, &MainWindow::updateErrorSeriesVisibility);
+    connect(m_showMtRawOffsetDegreeCheckBox, &QCheckBox::toggled, this, &MainWindow::updateErrorSeriesVisibility);
+    connect(m_showMtCorrectedErrorCheckBox, &QCheckBox::toggled, this, &MainWindow::updateErrorSeriesVisibility);
     connect(m_showHysteresisChartCheckBox, &QCheckBox::toggled, this, &MainWindow::updateChartVisibility);
     connect(m_showTamagawaErrorCheckBox, &QCheckBox::toggled, this, &MainWindow::updateErrorSeriesVisibility);
     connect(m_showMtRawErrorCheckBox, &QCheckBox::toggled, this, &MainWindow::updateErrorSeriesVisibility);
@@ -524,6 +774,11 @@ void MainWindow::setupGuideUi(QVBoxLayout *root)
     m_pecCyclesSpinBox = new QSpinBox(this);
     m_pecCyclesSpinBox->setRange(1, 30);
     m_pecCyclesSpinBox->setValue(3);
+    m_pecDirectionComboBox = new QComboBox(this);
+    m_pecDirectionComboBox->addItem(tr("DEC- (北半球)"), -1);
+    m_pecDirectionComboBox->addItem(tr("DEC+ (反向)"), 1);
+    m_pecDirectionComboBox->setCurrentIndex(0);
+    m_pecDirectionComboBox->setToolTip(tr("PEC training, upload, and MT phase scan use this direction"));
     m_pecStartButton = new QPushButton(tr("PEC Train"), this);
     m_pecStopButton = new QPushButton(tr("PEC Stop"), this);
     m_pecUploadButton = new QPushButton(tr("PEC Upload"), this);
@@ -553,6 +808,9 @@ void MainWindow::setupGuideUi(QVBoxLayout *root)
     m_mtCalSpeedSpinBox->setSingleStep(0.1);
     m_mtCalSpeedSpinBox->setValue(1.000);
     m_mtCalSpeedSpinBox->setSuffix(tr(" kHz"));
+    m_mtCalDirectionComboBox = new QComboBox(this);
+    m_mtCalDirectionComboBox->addItem(tr("正向 LUT"), 0);
+    m_mtCalDirectionComboBox->addItem(tr("反向 LUT"), 1);
     m_mtCalStartButton = new QPushButton(tr("MT Cal"), this);
     m_mtCalStopButton = new QPushButton(tr("MT Stop"), this);
     m_mtCalUploadButton = new QPushButton(tr("MT Upload"), this);
@@ -607,6 +865,8 @@ void MainWindow::setupGuideUi(QVBoxLayout *root)
 
     pecToolbar->addWidget(new QLabel(tr("PEC cycles:"), this));
     pecToolbar->addWidget(m_pecCyclesSpinBox);
+    pecToolbar->addWidget(new QLabel(tr("PEC/MT dir:"), this));
+    pecToolbar->addWidget(m_pecDirectionComboBox);
     pecToolbar->addWidget(m_pecStartButton);
     pecToolbar->addWidget(m_pecStopButton);
     pecToolbar->addWidget(m_pecUploadButton);
@@ -628,6 +888,8 @@ void MainWindow::setupGuideUi(QVBoxLayout *root)
 
     mtCalToolbar->addWidget(new QLabel(tr("MT cal speed:"), this));
     mtCalToolbar->addWidget(m_mtCalSpeedSpinBox);
+    mtCalToolbar->addWidget(new QLabel(tr("direction:"), this));
+    mtCalToolbar->addWidget(m_mtCalDirectionComboBox);
     mtCalToolbar->addWidget(m_mtCalStartButton);
     mtCalToolbar->addWidget(m_mtCalStopButton);
     mtCalToolbar->addWidget(m_mtCalUploadButton);
@@ -827,6 +1089,14 @@ void MainWindow::updateErrorSeriesVisibility()
         m_mtPhaseFilteredSeries->setVisible(!m_showMtFilteredErrorCheckBox || m_showMtFilteredErrorCheckBox->isChecked());
     if (m_mtPhasePeakMarkerSeries)
         m_mtPhasePeakMarkerSeries->setVisible(!m_showMtPeakMarkerCheckBox || m_showMtPeakMarkerCheckBox->isChecked());
+    if (m_mtCompareErrorSeries)
+        m_mtCompareErrorSeries->setVisible(!m_showMtCompareErrorCheckBox || m_showMtCompareErrorCheckBox->isChecked());
+    if (m_tamaDegreeSeries)
+        m_tamaDegreeSeries->setVisible(!m_showTamaDegreeCheckBox || m_showTamaDegreeCheckBox->isChecked());
+    if (m_mtRawOffsetDegreeSeries)
+        m_mtRawOffsetDegreeSeries->setVisible(!m_showMtRawOffsetDegreeCheckBox || m_showMtRawOffsetDegreeCheckBox->isChecked());
+    if (m_mtCorrectedErrorSeries)
+        m_mtCorrectedErrorSeries->setVisible(!m_showMtCorrectedErrorCheckBox || m_showMtCorrectedErrorCheckBox->isChecked());
 
     const double currentSeconds = m_elapsed.isValid()
             ? static_cast<double>(m_elapsed.elapsed()) / 1000.0
@@ -960,6 +1230,13 @@ double MainWindow::selectedMountSpeedKHz() const
 double MainWindow::selectedReferenceSpeedKHz() const
 {
     return m_referenceSpeedSpinBox ? m_referenceSpeedSpinBox->value() : selectedMountSpeedKHz();
+}
+
+double MainWindow::pecDirectionSign() const
+{
+    if (!m_pecDirectionComboBox)
+        return -1.0;
+    return m_pecDirectionComboBox->currentData().toInt() < 0 ? -1.0 : 1.0;
 }
 
 void MainWindow::setDecSpeedState(double commandSpeedKHz, double referenceSpeedKHz)
@@ -1303,12 +1580,18 @@ void MainWindow::appendSample(const EncoderSample &sample)
 
     if (m_pecTraining && m_referenceDecSpeedHz != 0.0) {
         const double trainRefHz = qAbs(m_pecTrainRefSpeedHz) > 0.0 ? m_pecTrainRefSpeedHz : m_referenceDecSpeedHz;
-        const double absRefHz = qAbs(trainRefHz);
+        const int directionSign = trainRefHz < 0.0 ? -1 : 1;
+        const auto wrappedPhaseStep = [](double steps) {
+            double phase = std::fmod(steps, static_cast<double>(PecPeriodSteps));
+            if (phase < 0.0)
+                phase += static_cast<double>(PecPeriodSteps);
+            return static_cast<int>(phase);
+        };
         const qint64 nowMs = m_elapsed.isValid() ? m_elapsed.elapsed() : 0;
 
         if (m_pecTrainState == PecTrainState::Prescan) {
-            const double stepsMoved = qMax(0.0, seconds - m_pecPrescanStartSeconds) * absRefHz;
-            const int phaseStep = static_cast<int>(std::fmod(stepsMoved, static_cast<double>(PecPeriodSteps)));
+            const double stepsMoved = (seconds - m_pecPrescanStartSeconds) * trainRefHz;
+            const int phaseStep = wrappedPhaseStep(stepsMoved);
             const int bin = qBound(0,
                                    static_cast<int>(phaseStep * static_cast<double>(PecBins) / PecPeriodSteps),
                                    PecBins - 1);
@@ -1319,13 +1602,13 @@ void MainWindow::appendSample(const EncoderSample &sample)
             }
             m_pecPrescanLastPhaseStep = phaseStep;
 
-            if (stepsMoved >= static_cast<double>(PecPeriodSteps)) {
+            if (qAbs(stepsMoved) >= static_cast<double>(PecPeriodSteps)) {
                 double peakBinFloat = 0.0;
                 double peakToPeak = 0.0;
                 if (analyzePecPrescanPeak(&m_pecPrescanPeakBin, &peakBinFloat, &peakToPeak)) {
                     const double peakSteps = peakBinFloat / static_cast<double>(PecBins)
                             * static_cast<double>(PecPeriodSteps);
-                    m_pecAlignTargetSteps = static_cast<double>(PecPeriodSteps) + peakSteps;
+                    m_pecAlignTargetSteps = directionSign * (static_cast<double>(PecPeriodSteps) + peakSteps);
                     m_pecTrainState = PecTrainState::AlignWait;
                     if (m_pecStatusLabel)
                         m_pecStatusLabel->setText(tr("PEC align peak bin %1 (%2), pp %3\", waiting next peak")
@@ -1342,21 +1625,25 @@ void MainWindow::appendSample(const EncoderSample &sample)
                 updatePecStatus();
             }
         } else if (m_pecTrainState == PecTrainState::AlignWait) {
-            const double stepsMoved = qMax(0.0, seconds - m_pecPrescanStartSeconds) * absRefHz;
+            const double stepsMoved = (seconds - m_pecPrescanStartSeconds) * trainRefHz;
+            const int phaseStep = wrappedPhaseStep(stepsMoved);
             m_pecCurrentBin = qBound(0,
-                                     static_cast<int>(std::fmod(stepsMoved, static_cast<double>(PecPeriodSteps))
-                                                      * static_cast<double>(PecBins) / PecPeriodSteps),
+                                     static_cast<int>(phaseStep * static_cast<double>(PecBins) / PecPeriodSteps),
                                      PecBins - 1);
-            if (stepsMoved >= m_pecAlignTargetSteps) {
+            const bool reachedTarget = directionSign > 0
+                    ? stepsMoved >= m_pecAlignTargetSteps
+                    : stepsMoved <= m_pecAlignTargetSteps;
+            if (reachedTarget) {
                 beginFormalPecTraining(seconds);
             } else if (nowMs - m_pecLastStatusUpdateMs >= 1000) {
                 m_pecLastStatusUpdateMs = nowMs;
                 updatePecStatus();
             }
         } else if (m_pecTrainState == PecTrainState::Training) {
-            const double stepsMoved = qMax(0.0, seconds - m_pecStartSeconds) * absRefHz;
-            const int phaseStep = static_cast<int>(std::fmod(stepsMoved, static_cast<double>(PecPeriodSteps)));
-            if (phaseStep < m_pecLastPhaseStep)
+            const double stepsMoved = (seconds - m_pecStartSeconds) * trainRefHz;
+            const int phaseStep = wrappedPhaseStep(stepsMoved);
+            if ((directionSign > 0 && phaseStep < m_pecLastPhaseStep)
+                    || (directionSign < 0 && phaseStep > m_pecLastPhaseStep))
                 finalizePecCycle(false);
             m_pecLastPhaseStep = phaseStep;
 
@@ -1546,6 +1833,8 @@ void MainWindow::updateMtCompareYAxis(double minVisibleSeconds)
     const QLineSeries *seriesList[] = {
         m_tamaDegreeSeries,
         m_mtRawOffsetDegreeSeries,
+        m_mtCompareErrorSeries,
+        m_mtCorrectedErrorSeries,
     };
 
     bool hasVisiblePoint = false;
@@ -1553,6 +1842,8 @@ void MainWindow::updateMtCompareYAxis(double minVisibleSeconds)
     double maxY = 0.0;
     for (const QLineSeries *series : seriesList) {
         if (!series)
+            continue;
+        if (!series->isVisible())
             continue;
         const auto points = series->pointsVector();
         for (const QPointF &point : points) {
@@ -1691,6 +1982,8 @@ void MainWindow::resetChart()
     m_mtPhasePeakMarkerSeries->clear();
     m_tamaDegreeSeries->clear();
     m_mtRawOffsetDegreeSeries->clear();
+    m_mtCompareErrorSeries->clear();
+    m_mtCorrectedErrorSeries->clear();
     m_mtRawOffsetErrorArcsecSamples.clear();
     m_hasPreviousDerivedSample = false;
     m_previousDec = 0;
@@ -1769,6 +2062,15 @@ void MainWindow::startPecTraining()
         return;
     }
 
+    const double directionSign = pecDirectionSign();
+    if (m_referenceDecSpeedHz * directionSign < 0.0) {
+        const double absRefKHz = qAbs(m_referenceDecSpeedHz) / 1000.0;
+        if (!sendGuideSpeed(directionSign * absRefKHz, directionSign * absRefKHz)) {
+            updateGuideStatus(tr("Failed to switch mount to PEC training direction"));
+            return;
+        }
+    }
+
     resetPecTraining();
     resetHysteresisCurrentTransition();
     m_mtMonitorRawPending = false;
@@ -1778,7 +2080,8 @@ void MainWindow::startPecTraining()
     m_pecTableReady = false;
     m_pecPrescanStartSeconds = static_cast<double>(m_elapsed.elapsed()) / 1000.0;
     m_pecStartSeconds = 0.0;
-    m_pecTrainRefSpeedHz = m_referenceDecSpeedHz;
+    m_pecTrainDirectionSign = directionSign < 0.0 ? -1 : 1;
+    m_pecTrainRefSpeedHz = directionSign * qAbs(m_referenceDecSpeedHz);
     m_pecLastStatusUpdateMs = 0;
     m_pecStartButton->setEnabled(false);
     m_pecStopButton->setEnabled(true);
@@ -2024,7 +2327,9 @@ void MainWindow::startMtPhaseScan()
     m_mtPhaseScanActive = true;
     m_mtPhaseScanStartMs = -1;
     m_mtPhaseScanLastStatusMs = -1;
-    m_mtPhaseScanSpeedHz = MtPhaseScanSpeedKHz * 1000.0;
+    const double scanDirectionSign = pecDirectionSign();
+    const double scanSpeedKHz = scanDirectionSign * MtPhaseScanSpeedKHz;
+    m_mtPhaseScanSpeedHz = scanSpeedKHz * 1000.0;
     m_mtPhaseRefValid = refOk;
     m_mtPhaseRefIdx = refIdx;
     m_mtPhaseRestorePecEnabled = refOk && refEnabled;
@@ -2045,16 +2350,16 @@ void MainWindow::startMtPhaseScan()
     m_mountController->sendCommand(QStringLiteral("PEC:DISABLE"));
     m_mountController->sendCommand(QStringLiteral("PEC:STATUS"));
 
-    if (sendGuideSpeed(MtPhaseScanSpeedKHz, MtPhaseScanSpeedKHz)) {
+    if (sendGuideSpeed(scanSpeedKHz, scanSpeedKHz)) {
         m_mountController->sendCommand(QStringLiteral("PEC:MTSCAN,START,%1,%2")
-                                       .arg(MtPhaseScanSpeedKHz, 0, 'f', 3)
+                                       .arg(scanSpeedKHz, 0, 'f', 3)
                                        .arg(MtPhaseScanDurationMs));
         const double periodSeconds = static_cast<double>(PecPeriodSteps) / qAbs(m_mtPhaseScanSpeedHz);
         const double scanCycles = static_cast<double>(MtPhaseScanDurationMs) / 1000.0 / periodSeconds;
         if (m_mtPhaseStatusLabel)
             m_mtPhaseStatusLabel->setText(tr("MT phase verify 0/%1s at %2 kHz, ref_idx=%3, period=%4s cycles=%5 fw=running")
                                           .arg(MtPhaseScanDurationMs / 1000)
-                                          .arg(MtPhaseScanSpeedKHz, 0, 'f', 3)
+                                          .arg(scanSpeedKHz, 0, 'f', 3)
                                           .arg(refOk ? QString::number(refIdx) : QStringLiteral("--"))
                                           .arg(periodSeconds, 0, 'f', 1)
                                           .arg(scanCycles, 0, 'f', 2));
@@ -2110,10 +2415,19 @@ void MainWindow::startMtCalibration()
     }
 
     stopGuideSimulation();
+    m_mtCalActiveDirection = m_mtCalDirectionComboBox
+            ? m_mtCalDirectionComboBox->currentData().toInt() : 0;
+    if (m_mtCalLutReadyByDirection[0] && m_mtCalLutReadyByDirection[1]) {
+        m_mtCalLutReadyByDirection[0] = false;
+        m_mtCalLutReadyByDirection[1] = false;
+        m_mtCalHaveSharedOffset = false;
+        m_mtCalHaveSharedDirection = false;
+    }
     m_mtCalRaw21.clear();
     m_mtCalTama25.clear();
     m_mtCalLut.clear();
     m_mtCalTableReady = false;
+    m_mtCalLutReadyByDirection[m_mtCalActiveDirection] = false;
     m_mtCalRawPending = false;
     m_mtMonitorRawPending = false;
     m_mtCalPendingTama25 = 0;
@@ -2129,9 +2443,16 @@ void MainWindow::startMtCalibration()
     m_mtCalHaveLastRawBin = false;
     m_mtCalLastRawBin = 0;
     m_mtCalStopArmed = false;
+    m_mtCalPreviousIntervalMs = m_intervalMs;
+    m_mtCalIntervalOverridden = false;
+    if (m_intervalMs > 20) {
+        updateReadInterval(20);
+        m_mtCalIntervalOverridden = true;
+    }
     const double speedKHz = m_mtCalSpeedSpinBox ? m_mtCalSpeedSpinBox->value() : 0.100;
     m_mtCalSpeedHz = qAbs(speedKHz) * 1000.0;
-    if (!sendGuideSpeed(speedKHz, speedKHz)) {
+    const double signedSpeedKHz = m_mtCalActiveDirection == 0 ? speedKHz : -speedKHz;
+    if (!sendGuideSpeed(signedSpeedKHz, signedSpeedKHz)) {
         updateMtCalStatus(tr("MT cal speed command failed"));
         return;
     }
@@ -2139,9 +2460,10 @@ void MainWindow::startMtCalibration()
     m_mtCalStartButton->setEnabled(false);
     m_mtCalStopButton->setEnabled(true);
     m_mtCalUploadButton->setEnabled(false);
-    updateMtCalStatus(tr("Collecting 0/%1 steps at %2 kHz")
+    updateMtCalStatus(tr("Collecting %1 LUT, 0/%2 steps at %3 kHz")
+                      .arg(m_mtCalActiveDirection == 0 ? tr("forward") : tr("reverse"))
                       .arg(static_cast<qint64>(MtCalStopSteps))
-                      .arg(speedKHz, 0, 'f', 3));
+                      .arg(signedSpeedKHz, 0, 'f', 3));
 }
 
 void MainWindow::stopMtCalibration()
@@ -2151,19 +2473,28 @@ void MainWindow::stopMtCalibration()
 
     m_mtCalTraining = false;
     m_mtCalRawPending = false;
+    if (m_mtCalIntervalOverridden) {
+        updateReadInterval(m_mtCalPreviousIntervalMs);
+        m_mtCalIntervalOverridden = false;
+    }
     if (m_mountController->isConnected())
         m_mountController->stopDec();
     setDecSpeedState(0.0, 0.0);
     m_mtCalStartButton->setEnabled(true);
     m_mtCalStopButton->setEnabled(false);
     m_mtCalTableReady = buildMtCalTable();
-    m_mtCalUploadButton->setEnabled(m_mtCalTableReady);
+    if (m_mtCalTableReady) {
+        m_mtCalLutByDirection[m_mtCalActiveDirection] = m_mtCalLut;
+        m_mtCalLutReadyByDirection[m_mtCalActiveDirection] = true;
+    }
+    m_mtCalUploadButton->setEnabled(m_mtCalLutReadyByDirection[0]
+                                    && m_mtCalLutReadyByDirection[1]);
 }
 
 void MainWindow::uploadMtCalibration()
 {
-    if (!m_mtCalTableReady && !buildMtCalTable()) {
-        updateMtCalStatus(tr("MT cal table is not ready"));
+    if (!m_mtCalLutReadyByDirection[0] || !m_mtCalLutReadyByDirection[1]) {
+        updateMtCalStatus(tr("Train both direction LUTs before upload"));
         return;
     }
     if (!m_mountController->isConnected()) {
@@ -2177,79 +2508,56 @@ void MainWindow::uploadMtCalibration()
     m_mountController->sendCommand(QStringLiteral("CAL:UPLOAD,ABORT"));
     waitForMountResponse(QStringLiteral("CAL:UPLOAD,ABORT,OK"), 1000);
 
-    m_mountResponses.clear();
-    if (!m_mountController->sendCommand(QStringLiteral("CAL:UPLOAD,BEGIN,%1,%2,%3")
-                                        .arg(m_mtCalOffset25)
-                                        .arg(m_mtCalDirInverted)
-                                        .arg(MtCalBins))
-            || !waitForMountResponse(QStringLiteral("CAL:UPLOAD,BEGIN,OK"), 2000)) {
-        updateMtCalStatus(tr("MT cal upload begin failed"));
-        m_mtUploadActive = false;
-        return;
-    }
-
-    for (int i = 0; i < MtCalBins; ++i) {
-        bool binAccepted = false;
-        for (int attempt = 0; attempt < 5 && !binAccepted; ++attempt) {
-            m_mountResponses.clear();
-            if (!m_mountController->sendCommand(QStringLiteral("CAL:UPLOAD,BIN,%1,%2")
-                                                .arg(i)
-                                                .arg(m_mtCalLut.value(i)))) {
-                updateMtCalStatus(tr("MT upload stopped at bin %1").arg(i));
-                m_mtUploadActive = false;
-                return;
-            }
-            if (waitForMountResponse(QStringLiteral("CAL:UPLOAD,BIN,OK,idx=%1").arg(i), 2000)) {
-                binAccepted = true;
-                break;
-            }
-
-            m_mountResponses.clear();
-            if (m_mountController->sendCommand(QStringLiteral("CAL:STATUS"))
-                    && waitForMountResponse(QStringLiteral("CAL:STATUS"), 1000)) {
-                static const QRegularExpression upRe(QStringLiteral("up=(\\d+)/(\\d+)"));
-                for (const QString &response : qAsConst(m_mountResponses)) {
-                    const auto match = upRe.match(response);
-                    if (!match.hasMatch())
-                        continue;
-                    const int uploaded = match.captured(1).toInt();
-                    if (uploaded >= i + 1) {
-                        binAccepted = true;
+    auto uploadSlot = [this](int slot, const QVector<int> &table) -> bool {
+        m_mountResponses.clear();
+        if (!m_mountController->sendCommand(QStringLiteral("CAL:UPLOAD,BEGIN,%1,%2,%3,%4")
+                                             .arg(m_mtCalOffset25).arg(m_mtCalDirInverted)
+                                             .arg(MtCalBins).arg(slot))
+                || !waitForMountResponse(QStringLiteral("CAL:UPLOAD,BEGIN,OK"), 2000))
+            return false;
+        for (int i = 0; i < MtCalBins; ++i) {
+            bool accepted = false;
+            for (int attempt = 0; attempt < 5 && !accepted; ++attempt) {
+                m_mountResponses.clear();
+                if (!m_mountController->sendCommand(QStringLiteral("CAL:UPLOAD,BIN,%1,%2")
+                                                     .arg(i).arg(table.value(i))))
+                    return false;
+                accepted = waitForMountResponse(QStringLiteral("CAL:UPLOAD,BIN,OK,idx=%1").arg(i), 2000);
+                if (!accepted) {
+                    m_mountResponses.clear();
+                    if (m_mountController->sendCommand(QStringLiteral("CAL:STATUS"))
+                            && waitForMountResponse(QStringLiteral("CAL:STATUS"), 1000)) {
+                        static const QRegularExpression upRe(QStringLiteral("up=(\\d+)/(\\d+)"));
+                        for (const QString &response : qAsConst(m_mountResponses)) {
+                            const auto match = upRe.match(response);
+                            if (match.hasMatch() && match.captured(1).toInt() >= i + 1)
+                                accepted = true;
+                        }
                     }
-                    break;
+                    QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+                    QThread::msleep(20);
                 }
             }
-
-            if (!binAccepted) {
-                updateMtCalStatus(tr("Retry MT bin %1 (%2/5)").arg(i).arg(attempt + 2));
-                QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
-                QThread::msleep(20);
-            }
+            if (!accepted)
+                return false;
+            if ((i % 128) == 127 || i == MtCalBins - 1)
+                updateMtCalStatus(tr("Uploading direction %1 LUT %2/%3").arg(slot ? tr("reverse") : tr("forward")).arg(i + 1).arg(MtCalBins));
         }
+        m_mountResponses.clear();
+        return m_mountController->sendCommand(QStringLiteral("CAL:UPLOAD,COMMIT"))
+                && waitForMountResponse(QStringLiteral("CAL:UPLOAD,COMMIT,OK"), 5000);
+    };
 
-        if (!binAccepted) {
-            updateMtCalStatus(tr("MT upload failed at bin %1 after retries").arg(i));
-            m_mountController->sendCommand(QStringLiteral("CAL:UPLOAD,ABORT"));
-            m_mtUploadActive = false;
-            return;
-        }
-
-        if ((i % 128) == 127 || i == MtCalBins - 1) {
-            updateMtCalStatus(tr("Uploading MT LUT %1/%2").arg(i + 1).arg(MtCalBins));
-        } else if ((i % 16) == 0) {
-            QCoreApplication::processEvents();
-        }
-    }
-
-    m_mountResponses.clear();
-    if (m_mountController->sendCommand(QStringLiteral("CAL:UPLOAD,COMMIT"))
-            && waitForMountResponse(QStringLiteral("CAL:UPLOAD,COMMIT,OK"), 5000)) {
+    const bool uploaded = uploadSlot(0, m_mtCalLutByDirection[0])
+            && uploadSlot(1, m_mtCalLutByDirection[1]);
+    if (uploaded) {
         m_mtMonitorOffset25 = m_mtCalOffset25;
         m_mtMonitorDirInverted = m_mtCalDirInverted;
         m_mtMonitorHasCalStatus = true;
-        updateMtCalStatus(tr("MT calibration uploaded"));
+        updateMtCalStatus(tr("Forward/reverse MT calibration uploaded"));
     } else {
-        updateMtCalStatus(tr("MT calibration commit failed"));
+        m_mountController->sendCommand(QStringLiteral("CAL:UPLOAD,ABORT"));
+        updateMtCalStatus(tr("Direction LUT upload failed"));
     }
     m_mtUploadActive = false;
 }
@@ -2311,8 +2619,11 @@ void MainWindow::uploadPecTable()
     }
 
     const double nowSeconds = m_elapsed.isValid() ? static_cast<double>(m_elapsed.elapsed()) / 1000.0 : m_pecStartSeconds;
-    const double stepsMoved = qMax(0.0, nowSeconds - m_pecStartSeconds) * qAbs(refHz);
-    const int phaseStep = static_cast<int>(std::fmod(stepsMoved, static_cast<double>(PecPeriodSteps)));
+    const double stepsMoved = (nowSeconds - m_pecStartSeconds) * refHz;
+    double phase = std::fmod(stepsMoved, static_cast<double>(PecPeriodSteps));
+    if (phase < 0.0)
+        phase += static_cast<double>(PecPeriodSteps);
+    const int phaseStep = static_cast<int>(phase);
     const int phaseBin = qBound(0,
                                 static_cast<int>(phaseStep * static_cast<double>(PecBins) / PecPeriodSteps),
                                 PecBins - 1);
@@ -2568,12 +2879,18 @@ void MainWindow::handleMtMonitorRawResponse(const QString &line)
         return;
 
     static const QRegularExpression rawRe(QStringLiteral("raw21=(\\d+)"));
+    static const QRegularExpression correctedRe(QStringLiteral("corr21=(\\d+)"));
     const auto rawMatch = rawRe.match(line);
     if (!rawMatch.hasMatch())
         return;
 
     const uint32_t raw21 = rawMatch.captured(1).toUInt() & (MtRawFullScale - 1u);
-    appendMtMonitorSample(m_mtMonitorPendingTama25, raw21, m_mtMonitorPendingElapsedMs);
+    const auto correctedMatch = correctedRe.match(line);
+    const uint32_t corrected21 = correctedMatch.hasMatch()
+            ? (correctedMatch.captured(1).toUInt() & (MtRawFullScale - 1u))
+            : std::numeric_limits<uint32_t>::max();
+    appendMtMonitorSample(m_mtMonitorPendingTama25, raw21, corrected21,
+                          m_mtMonitorPendingElapsedMs);
     m_mtMonitorRawPending = false;
 }
 
@@ -2741,7 +3058,8 @@ void MainWindow::requestMtMonitorSample(const EncoderSample &sample)
     }
 }
 
-void MainWindow::appendMtMonitorSample(uint32_t tama25, uint32_t raw21, qint64 elapsedMs)
+void MainWindow::appendMtMonitorSample(uint32_t tama25, uint32_t raw21,
+                                       uint32_t corrected21, qint64 elapsedMs)
 {
     const double seconds = static_cast<double>(elapsedMs) / 1000.0;
     const uint32_t rawOffset25 = mtRawOffsetOnly25(raw21);
@@ -2765,8 +3083,11 @@ void MainWindow::appendMtMonitorSample(uint32_t tama25, uint32_t raw21, qint64 e
                     && qAbs(m_pecTrainRefSpeedHz) > 0.0
                     && m_pecMtCycleSum.size() == PecBins
                     && m_pecMtCycleCount.size() == PecBins) {
-                const double stepsMoved = qMax(0.0, seconds - m_pecStartSeconds) * qAbs(m_pecTrainRefSpeedHz);
-                const int phaseStep = static_cast<int>(std::fmod(stepsMoved, static_cast<double>(PecPeriodSteps)));
+                const double stepsMoved = (seconds - m_pecStartSeconds) * m_pecTrainRefSpeedHz;
+                double phase = std::fmod(stepsMoved, static_cast<double>(PecPeriodSteps));
+                if (phase < 0.0)
+                    phase += static_cast<double>(PecPeriodSteps);
+                const int phaseStep = static_cast<int>(phase);
                 const int bin = qBound(0,
                                        static_cast<int>(phaseStep * static_cast<double>(PecBins) / PecPeriodSteps),
                                        PecBins - 1);
@@ -2780,7 +3101,7 @@ void MainWindow::appendMtMonitorSample(uint32_t tama25, uint32_t raw21, qint64 e
                     m_mtPhaseScanLastStatusMs = -1;
                 }
                 const double scanSeconds = static_cast<double>(elapsedMs - m_mtPhaseScanStartMs) / 1000.0;
-                const double scanSteps = qMax(0.0, scanSeconds * qAbs(m_mtPhaseScanSpeedHz));
+                const double scanSteps = scanSeconds * m_mtPhaseScanSpeedHz;
                 m_mtPhaseScanSamples.append({seconds, scanSteps, m_mtRawOffsetPositionErrorArcsec});
 
                 if (m_mtPhaseScanLastStatusMs < 0 || elapsedMs - m_mtPhaseScanLastStatusMs >= 1000) {
@@ -2813,6 +3134,35 @@ void MainWindow::appendMtMonitorSample(uint32_t tama25, uint32_t raw21, qint64 e
 
     m_tamaDegreeSeries->append(seconds, angle25ToDegree(tama25));
     m_mtRawOffsetDegreeSeries->append(seconds, angle25ToDegree(rawOffset25));
+    // Signed shortest-angle difference between the two absolute encoders.
+    // Keeping the subtraction in the 25-bit domain avoids a false 360-degree
+    // spike whenever either encoder wraps through zero.
+    int32_t compareError25 = static_cast<int32_t>(tama25 & 0x01FFFFFFu)
+                           - static_cast<int32_t>(rawOffset25 & 0x01FFFFFFu);
+    const int32_t compareHalf25 = 1 << 24;
+    const int32_t compareFull25 = 1 << 25;
+    if (compareError25 >= compareHalf25)
+        compareError25 -= compareFull25;
+    else if (compareError25 < -compareHalf25)
+        compareError25 += compareFull25;
+    if (m_mtCompareErrorSeries)
+        m_mtCompareErrorSeries->append(seconds,
+                                       static_cast<double>(compareError25) / static_cast<double>(compareFull25) * 360.0);
+
+    // Firmware-provided value already includes the MT LUT and offset.  The
+    // UINT32_MAX sentinel keeps the chart compatible with older firmware.
+    if (corrected21 != std::numeric_limits<uint32_t>::max() && m_mtCorrectedErrorSeries) {
+        const uint32_t corrected25 = (corrected21 & (MtRawFullScale - 1u)) << 4;
+        int32_t correctedError25 = static_cast<int32_t>(tama25 & 0x01FFFFFFu)
+                                 - static_cast<int32_t>(corrected25 & 0x01FFFFFFu);
+        if (correctedError25 >= compareHalf25)
+            correctedError25 -= compareFull25;
+        else if (correctedError25 < -compareHalf25)
+            correctedError25 += compareFull25;
+        m_mtCorrectedErrorSeries->append(
+                seconds, static_cast<double>(correctedError25)
+                        / static_cast<double>(compareFull25) * 360.0);
+    }
 
     m_mtRawOffsetErrorArcsecSamples.append(QPointF(seconds, shortestArcsecFrom25(rawOffset25, tama25)));
 
@@ -2892,10 +3242,12 @@ void MainWindow::finishMtPhaseScan(bool aborted)
 
     const int targetPeakBin = m_mtPhasePeakBinSpinBox ? m_mtPhasePeakBinSpinBox->value() : 0;
     const double lastScanSteps = m_mtPhaseScanSamples.isEmpty() ? 0.0 : m_mtPhaseScanSamples.last().steps;
-    const double currentPhaseSteps = std::fmod(qMax(0.0, lastScanSteps),
-                                               static_cast<double>(PecPeriodSteps));
+    double currentPhaseSteps = std::fmod(lastScanSteps, static_cast<double>(PecPeriodSteps));
+    if (currentPhaseSteps < 0.0)
+        currentPhaseSteps += static_cast<double>(PecPeriodSteps);
     const double currentScanBin = currentPhaseSteps * static_cast<double>(PecBins) / static_cast<double>(PecPeriodSteps);
-    int currentPecBin = static_cast<int>(std::lround(static_cast<double>(targetPeakBin) + currentScanBin - peakBinFloat));
+    int currentPecBin = static_cast<int>(std::lround(static_cast<double>(targetPeakBin)
+                                                     + currentScanBin - peakBinFloat));
     currentPecBin %= PecBins;
     if (currentPecBin < 0)
         currentPecBin += PecBins;
@@ -2969,12 +3321,12 @@ bool MainWindow::mtPhaseStableSampleRange(int *firstIndex, int *lastIndex) const
                       sampleCount);
 
         const double minSpanSteps = static_cast<double>(PecPeriodSteps) * MtPhaseMinUsedCycles;
-        double spanSteps = m_mtPhaseScanSamples.at(last - 1).steps - m_mtPhaseScanSamples.at(first).steps;
+        double spanSteps = qAbs(m_mtPhaseScanSamples.at(last - 1).steps - m_mtPhaseScanSamples.at(first).steps);
         if (spanSteps < minSpanSteps) {
             first = 0;
             last = sampleCount;
             spanSteps = sampleCount > 1
-                    ? m_mtPhaseScanSamples.last().steps - m_mtPhaseScanSamples.first().steps
+                    ? qAbs(m_mtPhaseScanSamples.last().steps - m_mtPhaseScanSamples.first().steps)
                     : 0.0;
         }
         if (spanSteps <= 0.0) {
@@ -3042,10 +3394,16 @@ bool MainWindow::matchMtPhaseTemplate(const QVector<double> &scanCurve, double *
     if (bestCorr < 0.25)
         return false;
 
+    const QVector<double> templateSmooth = smoothPecCurve(m_pecMtTemplate, MtPhaseSmoothHalfWindowBins, 3);
+    const PecPeakChoice templateChoice = selectPecPeakFromSmooth(templateSmooth, PecBins);
     int templatePeak = 0;
-    for (int i = 1; i < PecBins; ++i) {
-        if (m_pecMtTemplate[i] > m_pecMtTemplate[templatePeak])
-            templatePeak = i;
+    if (templateChoice.valid) {
+        templatePeak = templateChoice.bin;
+    } else {
+        for (int i = 1; i < PecBins; ++i) {
+            if (m_pecMtTemplate[i] > m_pecMtTemplate[templatePeak])
+                templatePeak = i;
+        }
     }
 
     double matchedPeak = static_cast<double>(templatePeak + bestShift);
@@ -3078,7 +3436,7 @@ bool MainWindow::analyzeMtPhaseScan(int *peakBin, double *peakBinFloat, double *
 
     const double firstStep = m_mtPhaseScanSamples.at(firstIndex).steps;
     const double lastStep = m_mtPhaseScanSamples.at(lastIndex - 1).steps;
-    const double spanSteps = qMax(1.0, lastStep - firstStep);
+    const double spanSteps = qMax(1.0, qAbs(lastStep - firstStep));
     double sumX = 0.0;
     double sumY = 0.0;
     double sumXX = 0.0;
@@ -3176,41 +3534,10 @@ bool MainWindow::analyzeMtPhaseScan(int *peakBin, double *peakBinFloat, double *
         return smooth;
     };
     const auto refinedPeakFromSmooth = [](const QVector<double> &smooth, double *peakToPeakOut) {
-        int maxBin = 0;
-        int minBin = 0;
-        for (int i = 1; i < smooth.size(); ++i) {
-            if (smooth[i] > smooth[maxBin])
-                maxBin = i;
-            if (smooth[i] < smooth[minBin])
-                minBin = i;
-        }
-
-        const double peakToPeak = smooth[maxBin] - smooth[minBin];
+        const PecPeakChoice choice = selectPecPeakFromSmooth(smooth, smooth.size());
         if (peakToPeakOut)
-            *peakToPeakOut = peakToPeak;
-        const double topThreshold = smooth[maxBin] - peakToPeak * 0.18;
-        double weightedBinSum = 0.0;
-        double weightSum = 0.0;
-        for (int offset = -smooth.size() / 3; offset <= smooth.size() / 3; ++offset) {
-            int idx = (maxBin + offset) % smooth.size();
-            if (idx < 0)
-                idx += smooth.size();
-            if (smooth[idx] < topThreshold)
-                continue;
-
-            const double weight = qMax(0.0, smooth[idx] - topThreshold);
-            const double shapedWeight = weight * weight * weight;
-            weightedBinSum += static_cast<double>(maxBin + offset) * shapedWeight;
-            weightSum += shapedWeight;
-        }
-
-        double refined = weightSum > 0.0
-                ? weightedBinSum / weightSum
-                : static_cast<double>(maxBin);
-        refined = std::fmod(refined, static_cast<double>(smooth.size()));
-        if (refined < 0.0)
-            refined += smooth.size();
-        return refined;
+            *peakToPeakOut = choice.peakToPeak;
+        return choice.valid ? choice.binFloat : 0.0;
     };
     fillMissingBins(&folded, count);
 
@@ -3224,8 +3551,10 @@ bool MainWindow::analyzeMtPhaseScan(int *peakBin, double *peakBinFloat, double *
         double weight = 0.0;
     };
     QVector<PeakCandidate> candidates;
-    const int firstCycle = static_cast<int>(std::floor(firstStep / static_cast<double>(PecPeriodSteps)));
-    const int lastCycle = static_cast<int>(std::floor(lastStep / static_cast<double>(PecPeriodSteps)));
+    const double lowStep = qMin(firstStep, lastStep);
+    const double highStep = qMax(firstStep, lastStep);
+    const int firstCycle = static_cast<int>(std::floor(lowStep / static_cast<double>(PecPeriodSteps)));
+    const int lastCycle = static_cast<int>(std::floor(highStep / static_cast<double>(PecPeriodSteps)));
     for (int cycle = firstCycle; cycle <= lastCycle; ++cycle) {
         const double cycleStart = static_cast<double>(cycle) * static_cast<double>(PecPeriodSteps);
         const double cycleEnd = cycleStart + static_cast<double>(PecPeriodSteps);
@@ -3444,7 +3773,7 @@ void MainWindow::updateMtPhaseFilteredSeries()
 
     const double firstStep = m_mtPhaseScanSamples.at(firstIndex).steps;
     const double lastStep = m_mtPhaseScanSamples.at(lastIndex - 1).steps;
-    const double spanSteps = qMax(1.0, lastStep - firstStep);
+    const double spanSteps = qMax(1.0, qAbs(lastStep - firstStep));
     double sumX = 0.0;
     double sumY = 0.0;
     double sumXX = 0.0;
@@ -3580,7 +3909,7 @@ void MainWindow::updateMtPhasePeakMarkers(double peakBinFloat)
         if (qAbs(delta) > toleranceSteps)
             continue;
 
-        if (sample.steps - lastMarkerSteps < static_cast<double>(PecPeriodSteps) * 0.5)
+        if (qAbs(sample.steps - lastMarkerSteps) < static_cast<double>(PecPeriodSteps) * 0.5)
             continue;
 
         double filteredY = sample.rawErrorArcsec;
@@ -4221,7 +4550,10 @@ bool MainWindow::buildMtCalTable()
         updateMtCalStatus(tr("MT direction samples too few: %1").arg(deltaSamples));
         return false;
     }
-    m_mtCalDirInverted = corr < 0 ? 1 : 0;
+    if (!m_mtCalHaveSharedDirection) {
+        m_mtCalDirInverted = corr < 0 ? 1 : 0;
+        m_mtCalHaveSharedDirection = true;
+    }
 
     QVector<int32_t> diffs;
     diffs.reserve(sampleCount);
@@ -4231,8 +4563,11 @@ bool MainWindow::buildMtCalTable()
             mt25 = invert25(mt25);
         diffs.append(wrapDiff25(m_mtCalTama25.at(i), mt25));
     }
-    std::sort(diffs.begin(), diffs.end());
-    m_mtCalOffset25 = diffs.at(diffs.size() / 2);
+    if (!m_mtCalHaveSharedOffset) {
+        std::sort(diffs.begin(), diffs.end());
+        m_mtCalOffset25 = diffs.at(diffs.size() / 2);
+        m_mtCalHaveSharedOffset = true;
+    }
 
     QVector<double> sum(MtCalBins, 0.0);
     QVector<int> count(MtCalBins, 0);
@@ -4350,6 +4685,7 @@ void MainWindow::resetPecTraining()
     m_pecPrescanStartSeconds = 0.0;
     m_pecAlignTargetSteps = 0.0;
     m_pecTrainRefSpeedHz = 0.0;
+    m_pecTrainDirectionSign = -1;
     m_pecCyclesDone = 0;
     m_pecLastPhaseStep = 0;
     m_pecCurrentBin = 0;
@@ -4399,6 +4735,35 @@ bool MainWindow::analyzePecPrescanPeak(int *peakBin, double *peakBinFloat, doubl
             folded[i] = (folded[prev] + folded[next]) * 0.5;
     }
 
+    // Remove the slow linear drift across the prescan period so peak
+    // prominence/asymmetry are measured on the periodic shape, not on a
+    // speed-error slope.
+    double detrendN = 0.0;
+    double detrendSx = 0.0;
+    double detrendSy = 0.0;
+    double detrendSxx = 0.0;
+    double detrendSxy = 0.0;
+    for (int i = 0; i < PecBins; ++i) {
+        if (m_pecPrescanCount[i] <= 0)
+            continue;
+        const double x = static_cast<double>(i);
+        const double y = folded[i];
+        detrendN += 1.0;
+        detrendSx += x;
+        detrendSy += y;
+        detrendSxx += x * x;
+        detrendSxy += x * y;
+    }
+    if (detrendN > 2.0) {
+        const double denom = detrendN * detrendSxx - detrendSx * detrendSx;
+        const double slope = qAbs(denom) > 1e-12
+                ? (detrendN * detrendSxy - detrendSx * detrendSy) / denom
+                : 0.0;
+        const double intercept = (detrendSy - slope * detrendSx) / detrendN;
+        for (int i = 0; i < PecBins; ++i)
+            folded[i] -= intercept + slope * static_cast<double>(i);
+    }
+
     QVector<double> smooth = folded;
     for (int pass = 0; pass < 3; ++pass) {
         QVector<double> next(PecBins, 0.0);
@@ -4417,48 +4782,21 @@ bool MainWindow::analyzePecPrescanPeak(int *peakBin, double *peakBinFloat, doubl
         smooth = next;
     }
 
-    int maxBin = 0;
-    int minBin = 0;
-    for (int i = 1; i < PecBins; ++i) {
-        if (smooth[i] > smooth[maxBin])
-            maxBin = i;
-        if (smooth[i] < smooth[minBin])
-            minBin = i;
-    }
-
-    const double peakToPeak = smooth[maxBin] - smooth[minBin];
-    if (peakToPeak <= 1.0)
+    const PecPeakChoice choice = selectPecPeakFromSmooth(smooth, PecBins);
+    if (!choice.valid)
         return false;
 
-    const double topThreshold = smooth[maxBin] - peakToPeak * 0.25;
-    double weightedBinSum = 0.0;
-    double weightSum = 0.0;
-    for (int offset = -PecBins / 2; offset <= PecBins / 2; ++offset) {
-        int idx = (maxBin + offset) % PecBins;
-        if (idx < 0)
-            idx += PecBins;
-        if (smooth[idx] < topThreshold)
-            continue;
-        const double weight = qMax(0.0, smooth[idx] - topThreshold);
-        const double shapedWeight = weight * weight;
-        weightedBinSum += static_cast<double>(maxBin + offset) * shapedWeight;
-        weightSum += shapedWeight;
-    }
-
-    double refined = weightSum > 0.0
-            ? weightedBinSum / weightSum
-            : static_cast<double>(maxBin);
-    refined = std::fmod(refined, static_cast<double>(PecBins));
-    if (refined < 0.0)
-        refined += PecBins;
-    const int rounded = static_cast<int>(std::lround(refined)) % PecBins;
+    qInfo().nospace() << "PEC prescan selected peak bin=" << choice.bin
+                      << " prom=" << choice.prominence
+                      << " left/right width=" << choice.leftWidth << "/" << choice.rightWidth
+                      << " p2p=" << choice.peakToPeak;
 
     if (peakBin)
-        *peakBin = rounded;
+        *peakBin = choice.bin;
     if (peakBinFloat)
-        *peakBinFloat = refined;
+        *peakBinFloat = choice.binFloat;
     if (peakToPeakArcsec)
-        *peakToPeakArcsec = peakToPeak;
+        *peakToPeakArcsec = choice.peakToPeak;
     return true;
 }
 
@@ -4476,7 +4814,7 @@ void MainWindow::beginFormalPecTraining(double seconds)
     m_pecMtTemplateReady = false;
     m_pecStartSeconds = seconds;
     m_pecCyclesDone = 0;
-    m_pecLastPhaseStep = 0;
+    m_pecLastPhaseStep = m_pecTrainDirectionSign < 0 ? PecPeriodSteps - 1 : 0;
     m_pecCurrentBin = 0;
     m_pecTableReady = false;
     m_pecTrainState = PecTrainState::Training;
@@ -4634,7 +4972,8 @@ bool MainWindow::buildPecTrimTable()
     if (m_pecErrorSum.size() != PecBins || m_pecCount.size() != PecBins)
         return false;
 
-    const double refHz = qAbs(m_pecTrainRefSpeedHz) > 0.0 ? qAbs(m_pecTrainRefSpeedHz) : qAbs(m_referenceDecSpeedHz);
+    const double signedRefHz = qAbs(m_pecTrainRefSpeedHz) > 0.0 ? m_pecTrainRefSpeedHz : m_referenceDecSpeedHz;
+    const double refHz = qAbs(signedRefHz);
     if (refHz < 1.0)
         return false;
 
@@ -4697,7 +5036,7 @@ bool MainWindow::buildPecTrimTable()
         const int p = (i + PecBins - 1) % PecBins;
         const int n = (i + 1) % PecBins;
         const double dArcsecPerStep = (smooth[n] - smooth[p]) / (2.0 * phaseStepPerBin);
-        double trimSps = dArcsecPerStep * refHz / arcsecPerStep;
+        double trimSps = dArcsecPerStep * signedRefHz / arcsecPerStep;
         const double limit = refHz * 0.35;
         trimSps = qBound(-limit, trimSps, limit);
         m_pecTrimSps[i] = trimSps;
